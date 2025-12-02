@@ -1,0 +1,3 @@
+python3 convergence_advection_2D.py
+python3 convergence_advection_3D.py
+python3 convergence_burgers_2D.py

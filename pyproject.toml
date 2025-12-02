@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools >= 75.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ader_dg_transport"
+version = "2020.0.0"
+dependencies = [
+  "numpy", "scipy", "matplotlib"
+]
+requires-python = ">=3.8"
+
+[tool.setuptools.packages.find]
+include = ["ader_dg_transport"]
