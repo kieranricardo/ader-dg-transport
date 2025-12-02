@@ -1,6 +1,5 @@
 import numpy as np
 from ader_dg_transport.utils import gll, lagrange1st
-from ader_dg_transport.multigrid import get_multigrid_refine_2D_matrices
 from scipy.interpolate import lagrange
 
 

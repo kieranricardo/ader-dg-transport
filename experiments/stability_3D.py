@@ -30,7 +30,6 @@ plot = args.plot
 
 data_dir = 'data/stability_3D'
 plot_dir = f'plots'
-# plot_dir = '../../../latex/ADER Transport/plots'
 
 if rank == 0:
     if not os.path.exists(data_dir):

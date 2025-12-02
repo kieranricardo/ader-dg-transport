@@ -27,45 +27,46 @@ cfl = 0.6
 run = True
 plot = True
 
-poly_order = 5
-
-if poly_order <= 5:
-    nxs = [20, 40, 80, 160]
-else:
-    nxs = [20, 40, 80]
-
 if run:
-    for nx in nxs:
 
-        nx = ny = nx
-        dx = xlim / nx
-        dt = cfl * dx / np.sqrt(cx**2 + cy**2)
-        n_steps = int(tend / dt) + 1
-        dt = tend / n_steps
+    for poly_order in [3, 5, 7]:
 
-        out_fp = os.path.join(data_dir, f'u_nx{nx}_ny{ny}_p{poly_order}_t{tend}.npy')
+        if poly_order <= 5:
+            nxs = [20, 40, 80, 160]
+        else:
+            nxs = [20, 40, 80]
 
-        solver = AdvectionAderDG2D(
-            xlim, ylim, nx, ny, poly_order=poly_order, dt=dt, cx=cx, cy=cy)
+        for nx in nxs:
 
-        xs, ys = solver.xs[:, :, 0], solver.ys[:, :, 0]
-        solver.u[:] = initial_condition(xs, ys)
+            nx = ny = nx
+            dx = xlim / nx
+            dt = cfl * dx / np.sqrt(cx**2 + cy**2)
+            n_steps = int(tend / dt) + 1
+            dt = tend / n_steps
 
-        t0 = time.time()
-        N = 5
-        for _ in range(n_steps):
-            solver.time_step()
-        t1 = time.time()
+            out_fp = os.path.join(data_dir, f'u_nx{nx}_ny{ny}_p{poly_order}_t{tend}.npy')
 
-        print(f'Order={poly_order}, nx={nx}')
-        print('Actual CFL:', dt * np.sqrt(cx**2 + cy**2) / dx)
-        print('Wall time:', t1 - t0, 's')
-        print('Simulation time:', solver.time, 's')
-        # print('Total time:', (tend / dt) * (t1 - t0) / 5)
-        print(out_fp)
-        print()
+            solver = AdvectionAderDG2D(
+                xlim, ylim, nx, ny, poly_order=poly_order, dt=dt, cx=cx, cy=cy)
 
-        np.save(out_fp, solver.u)
+            xs, ys = solver.xs[:, :, 0], solver.ys[:, :, 0]
+            solver.u[:] = initial_condition(xs, ys)
+
+            t0 = time.time()
+            N = 5
+            for _ in range(n_steps):
+                solver.time_step()
+            t1 = time.time()
+
+            print(f'Order={poly_order}, nx={nx}')
+            print('Actual CFL:', dt * np.sqrt(cx**2 + cy**2) / dx)
+            print('Wall time:', t1 - t0, 's')
+            print('Simulation time:', solver.time, 's')
+            # print('Total time:', (tend / dt) * (t1 - t0) / 5)
+            print(out_fp)
+            print()
+
+            np.save(out_fp, solver.u)
 
 if plot:
     poly_orders = [3, 5, 7]

@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.linalg import lu_factor, lu_solve
 from scipy.interpolate import lagrange
-from ader_dg_transport_transport.ader_dg_3D.base_ader_dg_3D import BaseADERDG3D
+from ader_dg_transport.ader_dg_3D.base_ader_dg_3D import BaseADERDG3D
 
 
 class AdvectionIterAderDG3D(BaseADERDG3D):

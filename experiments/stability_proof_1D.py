@@ -134,7 +134,6 @@ for poly_order in range(3, 15):
 
     for cfl in cfls:
 
-
         M = (Dt + cfl * Dx) + first_space_integral
         M += cfl * (left_time_integral - right_time_integral)
         A = np.sqrt(cfl) * from_st_last @ scipy.linalg.solve(M, to_st_left / weights[-1])
