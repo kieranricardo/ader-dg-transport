@@ -260,7 +260,7 @@ def max_cfl(solver, niter, nk, batch_size=10_000):
         mid = 0.5 * (lo + hi)
         max_amp = para_von_neumann_analysis(solver, mid, niter, nk, batch_size=batch_size)
 
-        if max_amp > (1 + 1e-6):
+        if max_amp > (1 + 1e-4):
             hi = mid
         else:
             lo = mid
@@ -273,6 +273,6 @@ for niter in range(1, 8):
 
     cfl = max_cfl(solver, niter, nk=nk)
     if rank == 0:
-        print(f'Order {solver.poly_order} with {niter} iterations max CFL: {cfl:.5f}')
+        print(f'Order {solver.poly_order} with {niter} iterations max CFL: {cfl:.5f}. Communication eff: {cfl / niter:.5f}. Compute eff: {cfl / (niter + 1):.5f}')
 
     comm.barrier()
