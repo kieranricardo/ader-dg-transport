@@ -18,9 +18,11 @@ import argparse
 comm = MPI.COMM_WORLD
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--o', type=int, help='Polynomial order')
 parser.add_argument('--nk', type=int, help='Number of wave numbers')
 args = parser.parse_args()
 
+order = args.o
 nk = args.nk
 ncpus = comm.Get_size()
 rank = comm.Get_rank()
@@ -122,8 +124,8 @@ def von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=10_0
     M2[h_slice, h_slice] += 0.5 * x_cfl * (xm_integral + xp_integral)
     M2[h_slice, h_slice] += 0.5 * y_cfl * (ym_integral + yp_integral)
 
-    M1_inv = np.linalg.inv(M1)
-    M2_inv = np.linalg.inv(M2)
+    # M1_inv = np.linalg.inv(M1)
+    # M2_inv = np.linalg.inv(M2)
 
     to_st_first_all_vars = np.zeros((3 * sz, 3 * n ** 2))
     for i in range(3):
@@ -186,8 +188,6 @@ def von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=10_0
     yp_bdry[v_slice, v_slice] += 0.5 * y_cfl * yp_integral
     yp_bdry[h_slice, h_slice] += 0.5 * y_cfl * yp_integral
 
-    state_pred = M1_inv @ t_bdry @ to_st_first_all_vars
-
     arr = np.zeros((n ** 3 * 3, n ** 2 * 3))
 
     eigs_all = []
@@ -198,7 +198,8 @@ def von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=10_0
         state_pred[(0, 0)] = t_bdry @ to_st_first_all_vars
 
         for key in state_pred.keys():
-            state_pred[key] = M1_inv @ state_pred[key]
+            # state_pred[key] = M1_inv @ state_pred[key]
+            state_pred[key] = np.linalg.solve(M1, state_pred[key])
 
         for _ in range(niter):
 
@@ -212,7 +213,8 @@ def von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=10_0
                 state_pred_[(key[0], key[1] - 1)] = yp_bdry @ ym_to_yp_all_vars @ val + state_pred_.get((key[0], key[1] - 1), arr)
 
             for key, val in state_pred_.items():
-                state_pred_[key] = M2_inv @ val
+                # state_pred_[key] = M2_inv @ val
+                state_pred_[key] = np.linalg.solve(M2, val)
 
             del state_pred
             state_pred = state_pred_
@@ -266,7 +268,7 @@ def max_cfl(solver, niter, nk, batch_size=10_000):
     return lo
 
 
-solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=3)
+solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=order)
 for niter in range(1, 8):
 
     cfl = max_cfl(solver, niter, nk=nk)
