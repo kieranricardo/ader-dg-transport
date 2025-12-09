@@ -21,6 +21,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--nk', type=int, help='Number of wave numbers')
 args = parser.parse_args()
 
+EPS  = 1e-4
+
 nk = args.nk
 ncpus = comm.Get_size()
 rank = comm.Get_rank()
@@ -273,12 +275,15 @@ def max_cfl(solver, nk):
         mid = 0.5 * (lo + hi)
         max_amp = para_von_neumann_analysis(solver, mid, nk)
 
-        if max_amp > (1 + 1e-4):
+        if max_amp > (1 + EPS):
             hi = mid
         else:
             lo = mid
 
     return lo
+
+if rank == 0:
+    print(f'Stability threshold = 1 + {EPS}')
 
 solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=3)
 cfl = max_cfl(solver, nk=nk)
@@ -291,6 +296,16 @@ if rank == 0:
     print(f'Order {solver.poly_order} regular ADER-DG max CFL: {cfl:.5f}.')
 
 solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=5)
+cfl = max_cfl(solver, nk=nk)
+if rank == 0:
+    print(f'Order {solver.poly_order} regular ADER-DG max CFL: {cfl:.5f}.')
+
+solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=6)
+cfl = max_cfl(solver, nk=nk)
+if rank == 0:
+    print(f'Order {solver.poly_order} regular ADER-DG max CFL: {cfl:.5f}.')
+
+solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=7)
 cfl = max_cfl(solver, nk=nk)
 if rank == 0:
     print(f'Order {solver.poly_order} regular ADER-DG max CFL: {cfl:.5f}.')

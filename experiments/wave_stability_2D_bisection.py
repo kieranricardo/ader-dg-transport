@@ -15,7 +15,7 @@ import argparse
 
 import argparse
 
-CFL_THRESH = 1 + 1e-6
+EPS = 1e-6
 comm = MPI.COMM_WORLD
 
 parser = argparse.ArgumentParser()
@@ -190,35 +190,35 @@ def von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=10_0
     yp_bdry[h_slice, h_slice] += 0.5 * y_cfl * yp_integral
 
     arr = np.zeros((n ** 3 * 3, n ** 2 * 3))
+    state_pred = dict()
+    state_pred[(0, 0)] = t_bdry @ to_st_first_all_vars
+
+    for key in state_pred.keys():
+        # state_pred[key] = M1_inv @ state_pred[key]
+        state_pred[key] = np.linalg.solve(M1, state_pred[key])
+
+    for _ in range(niter):
+
+        state_pred_ = dict()
+        state_pred_[(0, 0)] = t_bdry @ to_st_first_all_vars
+
+        for key, val in state_pred.items():
+            state_pred_[(key[0] + 1, key[1])] = xm_bdry @ xp_to_xm_all_vars @ val + state_pred_.get((key[0] + 1, key[1]), arr)
+            state_pred_[(key[0] - 1, key[1])] = xp_bdry @ xm_to_xp_all_vars @ val + state_pred_.get((key[0] - 1, key[1]), arr)
+            state_pred_[(key[0], key[1] + 1)] = ym_bdry @ yp_to_ym_all_vars @ val + state_pred_.get((key[0], key[1] + 1), arr)
+            state_pred_[(key[0], key[1] - 1)] = yp_bdry @ ym_to_yp_all_vars @ val + state_pred_.get((key[0], key[1] - 1), arr)
+
+        for key, val in state_pred_.items():
+            # state_pred_[key] = M2_inv @ val
+            state_pred_[key] = np.linalg.solve(M2, val)
+
+        del state_pred
+        state_pred = state_pred_
 
     eigs_all = []
     for i in range(0, x_shifts.size, batch_size):
 
         j = min(i + batch_size, x_shifts.size)
-        state_pred = dict()
-        state_pred[(0, 0)] = t_bdry @ to_st_first_all_vars
-
-        for key in state_pred.keys():
-            # state_pred[key] = M1_inv @ state_pred[key]
-            state_pred[key] = np.linalg.solve(M1, state_pred[key])
-
-        for _ in range(niter):
-
-            state_pred_ = dict()
-            state_pred_[(0, 0)] = t_bdry @ to_st_first_all_vars
-
-            for key, val in state_pred.items():
-                state_pred_[(key[0] + 1, key[1])] = xm_bdry @ xp_to_xm_all_vars @ val + state_pred_.get((key[0] + 1, key[1]), arr)
-                state_pred_[(key[0] - 1, key[1])] = xp_bdry @ xm_to_xp_all_vars @ val + state_pred_.get((key[0] - 1, key[1]), arr)
-                state_pred_[(key[0], key[1] + 1)] = ym_bdry @ yp_to_ym_all_vars @ val + state_pred_.get((key[0], key[1] + 1), arr)
-                state_pred_[(key[0], key[1] - 1)] = yp_bdry @ ym_to_yp_all_vars @ val + state_pred_.get((key[0], key[1] - 1), arr)
-
-            for key, val in state_pred_.items():
-                # state_pred_[key] = M2_inv @ val
-                state_pred_[key] = np.linalg.solve(M2, val)
-
-            del state_pred
-            state_pred = state_pred_
 
         mat = None
         for key, val in state_pred.items():
@@ -261,16 +261,18 @@ def max_cfl(solver, niter, nk, batch_size=10_000):
         mid = 0.5 * (lo + hi)
         max_amp = para_von_neumann_analysis(solver, mid, niter, nk, batch_size=batch_size)
 
-        if max_amp > (CFL_THRESH):
+        if max_amp > (1 + EPS):
             hi = mid
         else:
             lo = mid
 
     return lo
 
+if rank == 0:
+    print(f'Stability threshold = 1 + {EPS}')
 
 solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=order)
-for niter in range(1, 8):
+for niter in range(1, 6):
 
     cfl = max_cfl(solver, niter, nk=nk)
     if rank == 0:

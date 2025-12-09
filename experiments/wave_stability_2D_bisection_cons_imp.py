@@ -15,7 +15,7 @@ import argparse
 
 import argparse
 
-CFL_THRESH = 1 + 1e-4
+EPS = 1e-4
 comm = MPI.COMM_WORLD
 
 parser = argparse.ArgumentParser()
@@ -125,32 +125,40 @@ def von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=10_0
     M2[h_slice, h_slice] += 0.5 * x_cfl * (xm_integral + xp_integral)
     M2[h_slice, h_slice] += 0.5 * y_cfl * (ym_integral + yp_integral)
 
-    # time only matrix
-    Mt = np.zeros((3 * n ** 3, 3 * n ** 3))
-    Mt[u_slice, u_slice] += Dt + first_space_integral
-    Mt[v_slice, v_slice] += Dt + first_space_integral
-    Mt[h_slice, h_slice] += Dt + first_space_integral
-
-    # space only matrix
-    Mx = np.zeros((3 * n ** 3, 3 * n ** 3))# dudt + dhdx = 0
-    Mx[u_slice, h_slice] += x_cfl * Dx
+    # exclude numerical fluxes
+    M3 = np.zeros((3 * n ** 3, 3 * n ** 3))
+    M3[u_slice, u_slice] += Dt + first_space_integral
+    M3[v_slice, v_slice] += Dt + first_space_integral
+    M3[h_slice, h_slice] += Dt + first_space_integral
+    M3[u_slice, h_slice] += x_cfl * Dx
     # dvdt + dhdy = 0
-    Mx[v_slice, h_slice] += y_cfl * Dy
+    M3[v_slice, h_slice] += y_cfl * Dy
     # dhdt + dudx + dvdy = 0
-    Mx[h_slice, u_slice] += x_cfl * Dx
-    Mx[h_slice, v_slice] += y_cfl * Dy
-    Mx[u_slice, h_slice] += 0.5 * x_cfl * (xm_integral - xp_integral)
+    M3[h_slice, u_slice] += x_cfl * Dx
+    M3[h_slice, v_slice] += y_cfl * Dy
+    M3[u_slice, h_slice] += x_cfl * (xm_integral - xp_integral)
     # dvdt + dhdy = 0
-    Mx[v_slice, h_slice] += 0.5 * y_cfl * (ym_integral - yp_integral)
+    M3[v_slice, h_slice] += y_cfl * (ym_integral - yp_integral)
     # dhdt + dudx + dvdy = 0
-    Mx[h_slice, u_slice] += 0.5 * x_cfl * (xm_integral - xp_integral)
-    Mx[h_slice, v_slice] += 0.5 * y_cfl * (ym_integral - yp_integral)
+    M3[h_slice, u_slice] += x_cfl * (xm_integral - xp_integral)
+    M3[h_slice, v_slice] += y_cfl * (ym_integral - yp_integral)
+    
+    # numerical fluxes only
+    M4 = np.zeros((3 * n ** 3, 3 * n ** 3))# dudt + dhdx = 0
+    M4[u_slice, h_slice] += -0.5 * x_cfl * (xm_integral - xp_integral)
+    # dvdt + dhdy = 0
+    M4[v_slice, h_slice] += -0.5 * y_cfl * (ym_integral - yp_integral)
+    # dhdt + dudx + dvdy = 0
+    M4[h_slice, u_slice] += -0.5 * x_cfl * (xm_integral - xp_integral)
+    M4[h_slice, v_slice] += -0.5 * y_cfl * (ym_integral - yp_integral)
     # dissipation terms
     # 0.5 * c * u * dy * dt
-    Mx[u_slice, u_slice] += 0.5 * x_cfl * (xm_integral + xp_integral)
-    Mx[v_slice, v_slice] += 0.5 * y_cfl * (ym_integral + yp_integral)
-    Mx[h_slice, h_slice] += 0.5 * x_cfl * (xm_integral + xp_integral)
-    Mx[h_slice, h_slice] += 0.5 * y_cfl * (ym_integral + yp_integral)
+    M4[u_slice, u_slice] += 0.5 * x_cfl * (xm_integral + xp_integral)
+    M4[v_slice, v_slice] += 0.5 * y_cfl * (ym_integral + yp_integral)
+    M4[h_slice, h_slice] += 0.5 * x_cfl * (xm_integral + xp_integral)
+    M4[h_slice, h_slice] += 0.5 * y_cfl * (ym_integral + yp_integral)
+
+    assert np.allclose(M3 + M4, M2)
 
     # M1_inv = np.linalg.inv(M1)
     # M2_inv = np.linalg.inv(M2)
@@ -225,7 +233,7 @@ def von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=10_0
         # state_pred[key] = M1_inv @ state_pred[key]
         state_pred[key] = np.linalg.solve(M1, state_pred[key])
 
-    for _ in range(niter):
+    for _ in range(niter - 1):
 
         state_pred_ = dict()
         state_pred_[(0, 0)] = t_bdry @ to_st_first_all_vars
@@ -248,7 +256,7 @@ def von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=10_0
     state_pred_[(0, 0)] = t_bdry @ to_st_first_all_vars
 
     for key, val in state_pred.items():
-        state_pred_[key] = -Mx @ val + state_pred_.get(key, arr)
+        state_pred_[key] = -M4 @ val + state_pred_.get(key, arr)
         state_pred_[(key[0] + 1, key[1])] = xm_bdry @ xp_to_xm_all_vars @ val + state_pred_.get((key[0] + 1, key[1]), arr)
         state_pred_[(key[0] - 1, key[1])] = xp_bdry @ xm_to_xp_all_vars @ val + state_pred_.get((key[0] - 1, key[1]), arr)
         state_pred_[(key[0], key[1] + 1)] = ym_bdry @ yp_to_ym_all_vars @ val + state_pred_.get((key[0], key[1] + 1), arr)
@@ -256,7 +264,7 @@ def von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=10_0
 
     for key, val in state_pred_.items():
         # state_pred_[key] = M2_inv @ val
-        state_pred_[key] = np.linalg.solve(Mt, val)
+        state_pred_[key] = np.linalg.solve(M3, val)
 
     del state_pred
     state_pred = state_pred_
@@ -307,7 +315,7 @@ def max_cfl(solver, niter, nk, batch_size=10_000):
         mid = 0.5 * (lo + hi)
         max_amp = para_von_neumann_analysis(solver, mid, niter, nk, batch_size=batch_size)
 
-        if max_amp > (CFL_THRESH):
+        if max_amp > (1 + EPS):
             hi = mid
         else:
             lo = mid
@@ -315,13 +323,13 @@ def max_cfl(solver, niter, nk, batch_size=10_000):
     return lo
 
 if rank == 0:
-    print(f'Stability threshold = 1 + {CFL_THRESH - 1}')
+    print(f'Stability threshold = 1 + {EPS}')
 
 solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=order)
-for niter in range(0, 8):
+for niter in range(1, 8):
 
     cfl = max_cfl(solver, niter, nk=nk)
     if rank == 0:
-        print(f'Order {solver.poly_order} with {niter} iterations max CFL: {cfl:.5f}. Communication eff: {cfl / (niter + 1):.5f}. Compute eff: {cfl / (niter + 1):.5f}')
+        print(f'Order {solver.poly_order} with {niter} iterations max CFL: {cfl:.5f}. Communication eff: {cfl / niter:.5f}. Compute eff: {cfl / (niter + 1):.5f}')
 
     comm.barrier()
