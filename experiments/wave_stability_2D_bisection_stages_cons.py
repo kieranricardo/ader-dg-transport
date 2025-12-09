@@ -83,7 +83,7 @@ def get_matrices(poly_order):
     return to_st_first, to_st_last, from_st_first, from_st_last, xp_to_xm, yp_to_ym, xm_to_xp, ym_to_yp
 
 
-def von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=10_000):
+def von_neumann_analysis(solver, cfl, x_shifts, y_shifts, batch_size=10_000):
     x_cfl = cfl
     y_cfl = cfl
 
@@ -124,6 +124,43 @@ def von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=10_0
     M2[v_slice, v_slice] += 0.5 * y_cfl * (ym_integral + yp_integral)
     M2[h_slice, h_slice] += 0.5 * x_cfl * (xm_integral + xp_integral)
     M2[h_slice, h_slice] += 0.5 * y_cfl * (ym_integral + yp_integral)
+
+    # exclude numerical fluxes
+    Mxy = np.copy(M1)
+    Mxy[u_slice, h_slice] += x_cfl * (xm_integral - xp_integral)
+    Mxy[v_slice, h_slice] += y_cfl * (ym_integral - yp_integral)
+    Mxy[h_slice, u_slice] += x_cfl * (xm_integral - xp_integral)
+    Mxy[h_slice, v_slice] += y_cfl * (ym_integral - yp_integral)
+
+    # exclude x-numerical fluxes
+    Mx = np.copy(M1)
+    Mx[u_slice, h_slice] += x_cfl * (xm_integral - xp_integral)
+    Mx[h_slice, u_slice] += x_cfl * (xm_integral - xp_integral)
+    
+    # exclude y-numerical fluxes
+    My = np.copy(M1)
+    My[v_slice, h_slice] += y_cfl * (ym_integral - yp_integral)
+    My[h_slice, v_slice] += y_cfl * (ym_integral - yp_integral)
+    
+    # x numerical fluxes only
+    Mx_flx = np.zeros((3 * n ** 3, 3 * n ** 3))
+    Mx_flx[u_slice, h_slice] += -0.5 * x_cfl * (xm_integral - xp_integral)
+    Mx_flx[h_slice, u_slice] += -0.5 * x_cfl * (xm_integral - xp_integral)
+    # dissipation terms
+    Mx_flx[u_slice, u_slice] += 0.5 * x_cfl * (xm_integral + xp_integral)
+    Mx_flx[h_slice, h_slice] += 0.5 * x_cfl * (xm_integral + xp_integral)
+
+    # y numerical fluxes only
+    My_flx = np.zeros((3 * n ** 3, 3 * n ** 3))
+    My_flx[v_slice, h_slice] += -0.5 * y_cfl * (ym_integral - yp_integral)
+    My_flx[h_slice, v_slice] += -0.5 * y_cfl * (ym_integral - yp_integral)
+    # dissipation terms
+    My_flx[v_slice, v_slice] += 0.5 * y_cfl * (ym_integral + yp_integral)
+    My_flx[h_slice, h_slice] += 0.5 * y_cfl * (ym_integral + yp_integral)
+
+    Mxy_flx = Mx_flx + My_flx
+
+    assert np.allclose(Mxy + Mxy_flx, M2)
 
     # M1_inv = np.linalg.inv(M1)
     # M2_inv = np.linalg.inv(M2)
@@ -190,36 +227,59 @@ def von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=10_0
     yp_bdry[h_slice, h_slice] += 0.5 * y_cfl * yp_integral
 
     arr = np.zeros((n ** 3 * 3, n ** 2 * 3))
+
+    state_pred_0 = dict()
+    state_pred_0[(0, 0)] = t_bdry @ to_st_first_all_vars
+
+    for key, val in state_pred_0.items():
+        state_pred_0[key] = np.linalg.solve(M1, val)
+
+    # predictor with x fluxes
+    state_pred_1 = dict()
+    state_pred_1[(0, 0)] = t_bdry @ to_st_first_all_vars
+
+    for key, val in state_pred_0.items():
+        state_pred_1[key] = -Mx_flx @ val + state_pred_1.get(key, arr)
+        state_pred_1[(key[0] + 1, key[1])] = xm_bdry @ xp_to_xm_all_vars @ val + state_pred_1.get((key[0] + 1, key[1]), arr)
+        state_pred_1[(key[0] - 1, key[1])] = xp_bdry @ xm_to_xp_all_vars @ val + state_pred_1.get((key[0] - 1, key[1]), arr)
+
+    for key, val in state_pred_1.items():
+        state_pred_1[key] = np.linalg.solve(Mx, val)
+        
+    # predictor with y fluxes
+    state_pred_2 = dict()
+    state_pred_2[(0, 0)] = t_bdry @ to_st_first_all_vars
+
+    for key, val in state_pred_0.items():
+        state_pred_2[key] = -My_flx @ val + state_pred_2.get(key, arr)
+        state_pred_2[(key[0], key[1] + 1)] = ym_bdry @ yp_to_ym_all_vars @ val + state_pred_2.get((key[0], key[1] + 1), arr)
+        state_pred_2[(key[0], key[1] - 1)] = yp_bdry @ ym_to_yp_all_vars @ val + state_pred_2.get((key[0], key[1] - 1), arr)
+
+    for key, val in state_pred_2.items():
+        state_pred_2[key] = np.linalg.solve(My, val)
+        
+    # corrector 
     state_pred = dict()
     state_pred[(0, 0)] = t_bdry @ to_st_first_all_vars
 
-    for key in state_pred.keys():
-        # state_pred[key] = M1_inv @ state_pred[key]
-        state_pred[key] = np.linalg.solve(M1, state_pred[key])
+    for key, val in state_pred_1.items():
+        state_pred[key] = -My_flx @ val + state_pred.get(key, arr)
+        state_pred[(key[0], key[1] + 1)] = ym_bdry @ yp_to_ym_all_vars @ val + state_pred.get((key[0], key[1] + 1), arr)
+        state_pred[(key[0], key[1] - 1)] = yp_bdry @ ym_to_yp_all_vars @ val + state_pred.get((key[0], key[1] - 1), arr)
 
-    for _ in range(niter):
+    for key, val in state_pred_2.items():
+        state_pred[key] = -Mx_flx @ val + state_pred.get(key, arr)
+        state_pred[(key[0] + 1, key[1])] = xm_bdry @ xp_to_xm_all_vars @ val + state_pred.get((key[0] + 1, key[1]), arr)
+        state_pred[(key[0] - 1, key[1])] = xp_bdry @ xm_to_xp_all_vars @ val + state_pred.get((key[0] - 1, key[1]), arr)
 
-        state_pred_ = dict()
-        state_pred_[(0, 0)] = t_bdry @ to_st_first_all_vars
-
-        for key, val in state_pred.items():
-            state_pred_[(key[0] + 1, key[1])] = xm_bdry @ xp_to_xm_all_vars @ val + state_pred_.get((key[0] + 1, key[1]), arr)
-            state_pred_[(key[0] - 1, key[1])] = xp_bdry @ xm_to_xp_all_vars @ val + state_pred_.get((key[0] - 1, key[1]), arr)
-            state_pred_[(key[0], key[1] + 1)] = ym_bdry @ yp_to_ym_all_vars @ val + state_pred_.get((key[0], key[1] + 1), arr)
-            state_pred_[(key[0], key[1] - 1)] = yp_bdry @ ym_to_yp_all_vars @ val + state_pred_.get((key[0], key[1] - 1), arr)
-
-        for key, val in state_pred_.items():
-            # state_pred_[key] = M2_inv @ val
-            state_pred_[key] = np.linalg.solve(M2, val)
-
-        del state_pred
-        state_pred = state_pred_
+    for key, val in state_pred.items():
+        state_pred[key] = np.linalg.solve(Mxy, val)
 
     eigs_all = []
     for i in range(0, x_shifts.size, batch_size):
 
         j = min(i + batch_size, x_shifts.size)
-
+        
         mat = None
         for key, val in state_pred.items():
             if mat is None:
@@ -233,7 +293,7 @@ def von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=10_0
     return abs(np.array(eigs_all)).max()
 
 
-def para_von_neumann_analysis(solver, cfl, niter, nk, batch_size=10_000):
+def para_von_neumann_analysis(solver, cfl, nk, batch_size=10_000):
     shifts = np.linspace(0.0, 2 * np.pi, nk) * 1.0j
     x_shifts, y_shifts = np.meshgrid(shifts, shifts)
     x_shifts = x_shifts.ravel()
@@ -243,7 +303,7 @@ def para_von_neumann_analysis(solver, cfl, niter, nk, batch_size=10_000):
     x_shifts = x_shifts[mask][rank::ncpus]
     y_shifts = y_shifts[mask][rank::ncpus]
 
-    amp = von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=batch_size)
+    amp = von_neumann_analysis(solver, cfl, x_shifts, y_shifts, batch_size=batch_size)
     max_amp = comm.reduce(amp, op=MPI.MAX, root=0)
 
     max_amp = comm.bcast(max_amp, root=0)
@@ -251,7 +311,7 @@ def para_von_neumann_analysis(solver, cfl, niter, nk, batch_size=10_000):
     return max_amp
 
 
-def max_cfl(solver, niter, nk, batch_size=10_000):
+def max_cfl(solver, nk, batch_size=10_000):
 
     hi = 2.0
     lo = 1e-6
@@ -259,7 +319,7 @@ def max_cfl(solver, niter, nk, batch_size=10_000):
     for _ in range(10):
 
         mid = 0.5 * (lo + hi)
-        max_amp = para_von_neumann_analysis(solver, mid, niter, nk, batch_size=batch_size)
+        max_amp = para_von_neumann_analysis(solver, mid, nk, batch_size=batch_size)
 
         if max_amp > (1 + EPS):
             hi = mid
@@ -272,10 +332,8 @@ if rank == 0:
     print(f'Stability threshold = 1 + {EPS}')
 
 solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=order)
-for niter in range(3, 5):
+cfl = max_cfl(solver, nk=nk)
+if rank == 0:
+    print(f'Order {solver.poly_order} max CFL: {cfl:.5f}. Communication eff: {cfl / 2:.5f}. Compute eff: {cfl / 4:.5f}')
 
-    cfl = max_cfl(solver, niter, nk=nk)
-    if rank == 0:
-        print(f'Order {solver.poly_order} with {niter} iterations max CFL: {cfl:.5f}. Communication eff: {cfl / niter:.5f}. Compute eff: {cfl / (niter + 1):.5f}')
-
-    comm.barrier()
+comm.barrier()
