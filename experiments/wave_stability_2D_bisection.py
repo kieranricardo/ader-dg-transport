@@ -15,7 +15,7 @@ import argparse
 
 import argparse
 
-EPS = 1e-6
+EPS = 1e-4
 comm = MPI.COMM_WORLD
 
 parser = argparse.ArgumentParser()
