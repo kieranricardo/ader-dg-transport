@@ -273,7 +273,7 @@ def max_cfl(solver, nk):
         mid = 0.5 * (lo + hi)
         max_amp = para_von_neumann_analysis(solver, mid, nk)
 
-        if max_amp > (1 + 1e-6):
+        if max_amp > (1 + 1e-4):
             hi = mid
         else:
             lo = mid
