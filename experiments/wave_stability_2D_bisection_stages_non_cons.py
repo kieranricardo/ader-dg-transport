@@ -276,6 +276,7 @@ def von_neumann_analysis(solver, cfl, x_shifts, y_shifts, batch_size=10_000):
     for key, val in state_pred.items():
         state_pred[key] = np.linalg.solve(M2, val)
 
+    # conservative final stage
     # for key, val in state_pred_1.items():
     #     state_pred[key] = -My_flx @ val + state_pred.get(key, arr)
     #     state_pred[(key[0], key[1] + 1)] = ym_bdry @ yp_to_ym_all_vars @ val + state_pred.get((key[0], key[1] + 1), arr)
