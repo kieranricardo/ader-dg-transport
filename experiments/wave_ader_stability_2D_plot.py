@@ -19,13 +19,27 @@ comm = MPI.COMM_WORLD
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--nk', type=int, help='Number of wave numbers')
+parser.add_argument('--o', type=int, help='Polynomial order')
 args = parser.parse_args()
 
 EPS  = 1e-6
 
+order = args.o
 nk = args.nk
 ncpus = comm.Get_size()
 rank = comm.Get_rank()
+
+
+data_dir = 'data/stability_2D'
+plot_dir = f'plots'
+# plot_dir = '../../../latex/ADER Transport/plots'
+
+if rank == 0:
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir)
 
 
 def get_matrices(poly_order):
@@ -137,10 +151,7 @@ def von_neumann_analysis(solver, cfl, x_shifts, y_shifts, verbose=False):
     M2[v_slice, v_slice] += 0.5 * y_cfl * (ym_integral + yp_integral)
     M2[h_slice, h_slice] += 0.5 * x_cfl * (xm_integral + xp_integral)
     M2[h_slice, h_slice] += 0.5 * y_cfl * (ym_integral + yp_integral)
-    
-    M1_inv = np.linalg.inv(M1)
-    M2_inv = np.linalg.inv(M1)
-    
+        
     to_st_first_all_vars = np.zeros((3 * sz, 3 * n**2))
     for i in range(3):
         to_st_first_all_vars[i*sz:(i+1)*sz, i*n**2:(i+1)*n**2] = to_st_first
@@ -203,7 +214,7 @@ def von_neumann_analysis(solver, cfl, x_shifts, y_shifts, verbose=False):
     yp_bdry[v_slice, v_slice] += 0.5 * y_cfl * yp_integral
     yp_bdry[h_slice, h_slice] += 0.5 * y_cfl * yp_integral
     
-    state_pred = M1_inv @ t_bdry @ to_st_first_all_vars
+    state_pred = np.linalg.solve(M1, t_bdry @ to_st_first_all_vars)
     
     R0 = t_bdry @ to_st_first_all_vars - M2 @ state_pred
     
@@ -265,47 +276,29 @@ def para_von_neumann_analysis(solver, cfl, nk):
     return max_amp
 
 
-def max_cfl(solver, nk):
+for poly_order in range(3, order+1):
 
-    hi = 0.1
-    lo = 1e-6
+    if poly_order == 3:
+        cfls = np.linspace(1e-5, 0.1, 40)
+    elif poly_order == 4:
+        cfls = np.linspace(1e-5, 0.06, 40)
+    elif poly_order == 5:
+        cfls = np.linspace(1e-5, 0.04, 40)
+    elif poly_order == 6:
+        cfls = np.linspace(1e-5, 0.025, 40)
+    elif poly_order == 7:
+        cfls = np.linspace(1e-5, 0.025, 40)
 
-    for _ in range(15):
+    solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=poly_order)
+    if rank == 0:
+        print('Running order =', solver.poly_order)
+    amps = [para_von_neumann_analysis(solver, cfl, nk) for cfl in cfls]
+    plt.plot(cfls, np.array(amps) - 1, '-', label=f'Order {solver.poly_order}')
 
-        mid = 0.5 * (lo + hi)
-        max_amp = para_von_neumann_analysis(solver, mid, nk)
-
-        if max_amp > (1 + EPS):
-            hi = mid
-        else:
-            lo = mid
-
-    return lo
-
-if rank == 0:
-    print(f'Stability threshold = 1 + {EPS}')
-
-solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=3)
-cfl = max_cfl(solver, nk=nk)
-if rank == 0:
-    print(f'Order {solver.poly_order} regular ADER-DG max CFL: {cfl:.5f}.')
-
-solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=4)
-cfl = max_cfl(solver, nk=nk)
-if rank == 0:
-    print(f'Order {solver.poly_order} regular ADER-DG max CFL: {cfl:.5f}.')
-
-solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=5)
-cfl = max_cfl(solver, nk=nk)
-if rank == 0:
-    print(f'Order {solver.poly_order} regular ADER-DG max CFL: {cfl:.5f}.')
-
-solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=6)
-cfl = max_cfl(solver, nk=nk)
-if rank == 0:
-    print(f'Order {solver.poly_order} regular ADER-DG max CFL: {cfl:.5f}.')
-
-solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=7)
-cfl = max_cfl(solver, nk=nk)
-if rank == 0:
-    print(f'Order {solver.poly_order} regular ADER-DG max CFL: {cfl:.5f}.')
+plt.yscale('symlog', linthresh=1e-14)
+plt.ylabel("Amplification factor")
+plt.xlabel("CFL")
+plt.legend()
+plt.grid()
+plt.title('Standard ADER-DG stability')
+plt.savefig(os.path.join(plot_dir, f"wave-ader-dg-2D-order-{order}-amplification-minus-one.png"))

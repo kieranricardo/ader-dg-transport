@@ -15,17 +15,30 @@ import argparse
 
 import argparse
 
+EPS = 1e-4
 comm = MPI.COMM_WORLD
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--o', type=int, help='Polynomial order')
 parser.add_argument('--nk', type=int, help='Number of wave numbers')
 args = parser.parse_args()
 
-EPS  = 1e-6
-
+order = args.o
 nk = args.nk
 ncpus = comm.Get_size()
 rank = comm.Get_rank()
+
+
+data_dir = 'data/stability_2D'
+plot_dir = f'plots'
+# plot_dir = '../../../latex/ADER Transport/plots'
+
+if rank == 0:
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir)
 
 
 def get_matrices(poly_order):
@@ -82,28 +95,21 @@ def get_matrices(poly_order):
     return to_st_first, to_st_last, from_st_first, from_st_last, xp_to_xm, yp_to_ym, xm_to_xp, ym_to_yp
 
 
-def von_neumann_analysis(solver, cfl, x_shifts, y_shifts, verbose=False):
-
-    t0 = time.time()
+def von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=10_000):
     x_cfl = cfl
     y_cfl = cfl
 
     (Dt, Dx, Dy, volume_integral, first_space_integral,
      last_space_integral, xm_integral, xp_integral, ym_integral, yp_integral) = solver.get_matrices()
     to_st_first, to_st_last, from_st_first, from_st_last, xp_to_xm, yp_to_ym, xm_to_xp, ym_to_yp = get_matrices(solver.poly_order)
-    
+
     n = solver.poly_order + 1
-    sz = n**3
+    sz = n ** 3
     u_slice = slice(0, sz)
     v_slice = slice(sz, 2 * sz)
     h_slice = slice(2 * sz, 3 * sz)
-    
-    M_ = np.zeros((3*n**3, 3*n**3))
-    M_[u_slice, u_slice] += Dt + first_space_integral
-    M_[v_slice, v_slice] += Dt + first_space_integral
-    M_[h_slice, h_slice] += Dt + first_space_integral
 
-    M1 = np.zeros((3*n**3, 3*n**3))
+    M1 = np.zeros((3 * n ** 3, 3 * n ** 3))
     M1[u_slice, u_slice] += Dt + first_space_integral
     M1[v_slice, v_slice] += Dt + first_space_integral
     M1[h_slice, h_slice] += Dt + first_space_integral
@@ -115,14 +121,7 @@ def von_neumann_analysis(solver, cfl, x_shifts, y_shifts, verbose=False):
     M1[h_slice, u_slice] += x_cfl * Dx
     M1[h_slice, v_slice] += y_cfl * Dy
 
-    M2 = np.zeros((3*n**3, 3*n**3))
-    # dudt + dhdx = 0
-    M2[u_slice, h_slice] += x_cfl * Dx
-    # dvdt + dhdy = 0
-    M2[v_slice, h_slice] += y_cfl * Dy
-    # dhdt + dudx + dvdy = 0
-    M2[h_slice, u_slice] += x_cfl * Dx
-    M2[h_slice, v_slice] += y_cfl * Dy
+    M2 = np.copy(M1)
     # dudt + dhdx = 0
     M2[u_slice, h_slice] += 0.5 * x_cfl * (xm_integral - xp_integral)
     # dvdt + dhdy = 0
@@ -137,57 +136,56 @@ def von_neumann_analysis(solver, cfl, x_shifts, y_shifts, verbose=False):
     M2[v_slice, v_slice] += 0.5 * y_cfl * (ym_integral + yp_integral)
     M2[h_slice, h_slice] += 0.5 * x_cfl * (xm_integral + xp_integral)
     M2[h_slice, h_slice] += 0.5 * y_cfl * (ym_integral + yp_integral)
-    
-    M1_inv = np.linalg.inv(M1)
-    M2_inv = np.linalg.inv(M1)
-    
-    to_st_first_all_vars = np.zeros((3 * sz, 3 * n**2))
+
+    # M1_inv = np.linalg.inv(M1)
+    # M2_inv = np.linalg.inv(M2)
+
+    to_st_first_all_vars = np.zeros((3 * sz, 3 * n ** 2))
     for i in range(3):
-        to_st_first_all_vars[i*sz:(i+1)*sz, i*n**2:(i+1)*n**2] = to_st_first
-        
-    from_st_last_all_vars = np.zeros((3 * n**2, 3 * sz))
+        to_st_first_all_vars[i * sz:(i + 1) * sz, i * n ** 2:(i + 1) * n ** 2] = to_st_first
+
+    from_st_last_all_vars = np.zeros((3 * n ** 2, 3 * sz))
     for i in range(3):
-        from_st_last_all_vars[i*n**2:(i+1)*n**2, i*sz:(i+1)*sz] = from_st_last
-        
+        from_st_last_all_vars[i * n ** 2:(i + 1) * n ** 2, i * sz:(i + 1) * sz] = from_st_last
+
     xp_to_xm_all_vars = np.zeros((3 * sz, 3 * sz))
     for i in range(3):
-        xp_to_xm_all_vars[i*sz:(i+1)*sz, i*sz:(i+1)*sz] = xp_to_xm
+        xp_to_xm_all_vars[i * sz:(i + 1) * sz, i * sz:(i + 1) * sz] = xp_to_xm
 
     yp_to_ym_all_vars = np.zeros((3 * sz, 3 * sz))
     for i in range(3):
-        yp_to_ym_all_vars[i*sz:(i+1)*sz, i*sz:(i+1)*sz] = yp_to_ym
+        yp_to_ym_all_vars[i * sz:(i + 1) * sz, i * sz:(i + 1) * sz] = yp_to_ym
 
     xm_to_xp_all_vars = np.zeros((3 * sz, 3 * sz))
     for i in range(3):
-        xm_to_xp_all_vars[i*sz:(i+1)*sz, i*sz:(i+1)*sz] = xm_to_xp
+        xm_to_xp_all_vars[i * sz:(i + 1) * sz, i * sz:(i + 1) * sz] = xm_to_xp
 
     ym_to_yp_all_vars = np.zeros((3 * sz, 3 * sz))
     for i in range(3):
-        ym_to_yp_all_vars[i*sz:(i+1)*sz, i*sz:(i+1)*sz] = ym_to_yp
-        
-    t_bdry = np.zeros((3*n**3, 3*n**3))
+        ym_to_yp_all_vars[i * sz:(i + 1) * sz, i * sz:(i + 1) * sz] = ym_to_yp
+
+    t_bdry = np.zeros((3 * n ** 3, 3 * n ** 3))
     t_bdry[u_slice, u_slice] += first_space_integral
     t_bdry[v_slice, v_slice] += first_space_integral
     t_bdry[h_slice, h_slice] += first_space_integral
 
-    xm_bdry = np.zeros((3*n**3, 3*n**3))
-    xp_bdry = np.zeros((3*n**3, 3*n**3))
-    ym_bdry = np.zeros((3*n**3, 3*n**3))
-    yp_bdry = np.zeros((3*n**3, 3*n**3))
+    xm_bdry = np.zeros((3 * n ** 3, 3 * n ** 3))
+    xp_bdry = np.zeros((3 * n ** 3, 3 * n ** 3))
+    ym_bdry = np.zeros((3 * n ** 3, 3 * n ** 3))
+    yp_bdry = np.zeros((3 * n ** 3, 3 * n ** 3))
 
     xm_bdry[u_slice, h_slice] += 0.5 * x_cfl * xm_integral
-    xm_bdry[h_slice, u_slice] += 0.5 * x_cfl * xm_integral 
+    xm_bdry[h_slice, u_slice] += 0.5 * x_cfl * xm_integral
 
     xm_bdry[u_slice, u_slice] += 0.5 * x_cfl * xm_integral
     xm_bdry[h_slice, h_slice] += 0.5 * x_cfl * xm_integral
 
     #############
-    xp_bdry[u_slice, h_slice] += 0.5 * x_cfl * ( - xp_integral)
-    xp_bdry[h_slice, u_slice] += 0.5 * x_cfl * ( - xp_integral)
+    xp_bdry[u_slice, h_slice] += 0.5 * x_cfl * (- xp_integral)
+    xp_bdry[h_slice, u_slice] += 0.5 * x_cfl * (- xp_integral)
 
     xp_bdry[u_slice, u_slice] += 0.5 * x_cfl * xp_integral
     xp_bdry[h_slice, h_slice] += 0.5 * x_cfl * xp_integral
-
 
     #############
     ym_bdry[v_slice, h_slice] += 0.5 * y_cfl * ym_integral
@@ -197,57 +195,57 @@ def von_neumann_analysis(solver, cfl, x_shifts, y_shifts, verbose=False):
     ym_bdry[h_slice, h_slice] += 0.5 * y_cfl * ym_integral
 
     #############
-    yp_bdry[v_slice, h_slice] += 0.5 * y_cfl * ( - yp_integral)
-    yp_bdry[h_slice, v_slice] += 0.5 * y_cfl * ( - yp_integral)
+    yp_bdry[v_slice, h_slice] += 0.5 * y_cfl * (- yp_integral)
+    yp_bdry[h_slice, v_slice] += 0.5 * y_cfl * (- yp_integral)
 
     yp_bdry[v_slice, v_slice] += 0.5 * y_cfl * yp_integral
     yp_bdry[h_slice, h_slice] += 0.5 * y_cfl * yp_integral
-    
-    state_pred = M1_inv @ t_bdry @ to_st_first_all_vars
-    
-    R0 = t_bdry @ to_st_first_all_vars - M2 @ state_pred
-    
-    exp_xp_shifts = np.exp(x_shifts)[:, None, None]
-    exp_yp_shifts = np.exp(y_shifts)[:, None, None]
-    
-    exp_xm_shifts = np.exp(-x_shifts)[:, None, None]
-    exp_ym_shifts = np.exp(-y_shifts)[:, None, None]
-    
-    if verbose:
-        print('Setup time:', time.time() - t0)
-    
-    t0 = time.time()
-    Rxm = xm_bdry @ xp_to_xm_all_vars @ state_pred
-    Rxp = xp_bdry @ xm_to_xp_all_vars @ state_pred
-    Rym = ym_bdry @ yp_to_ym_all_vars @ state_pred
-    Ryp = yp_bdry @ ym_to_yp_all_vars @ state_pred
 
-#     R = R0[None] + Rxm * np.exp(x_shifts)[:, None, None] + Rxp * np.exp(-x_shifts)[:, None, None]
-#     R += Rym * np.exp(y_shifts)[:, None, None] + Ryp * np.exp(-y_shifts)[:, None, None]
-#     shape = R.shape
-#     R = R.swapaxes(0, 1).reshape((shape[1], -1))
-#     state_pred = scipy.linalg.solve(M_, R).reshape((shape[1], shape[0], shape[2])).swapaxes(0, 1)
-    
-    state_pred = scipy.linalg.solve(M_, R0)[None] + scipy.linalg.solve(M_, Rxm)[None] * exp_xp_shifts
-    state_pred +=  scipy.linalg.solve(M_, Rxp) * exp_xm_shifts
-    state_pred +=  scipy.linalg.solve(M_, Rym)[None] * exp_yp_shifts
-    state_pred +=  scipy.linalg.solve(M_, Ryp)[None] * exp_ym_shifts
-    
-    mat = from_st_last_all_vars @ state_pred
-    
-    if verbose:
-        print('Assemble time:', time.time() - t0)
-    
-    t0 = time.time()
-    eigs = np.linalg.eigvals(mat)
-    
-    if verbose:
-        print('Eig time:', time.time() - t0)
+    arr = np.zeros((n ** 3 * 3, n ** 2 * 3))
+    state_pred = dict()
+    state_pred[(0, 0)] = t_bdry @ to_st_first_all_vars
 
-    return abs(eigs).max()
+    for key in state_pred.keys():
+        # state_pred[key] = M1_inv @ state_pred[key]
+        state_pred[key] = np.linalg.solve(M1, state_pred[key])
+
+    for _ in range(niter):
+
+        state_pred_ = dict()
+        state_pred_[(0, 0)] = t_bdry @ to_st_first_all_vars
+
+        for key, val in state_pred.items():
+            state_pred_[(key[0] + 1, key[1])] = xm_bdry @ xp_to_xm_all_vars @ val + state_pred_.get((key[0] + 1, key[1]), arr)
+            state_pred_[(key[0] - 1, key[1])] = xp_bdry @ xm_to_xp_all_vars @ val + state_pred_.get((key[0] - 1, key[1]), arr)
+            state_pred_[(key[0], key[1] + 1)] = ym_bdry @ yp_to_ym_all_vars @ val + state_pred_.get((key[0], key[1] + 1), arr)
+            state_pred_[(key[0], key[1] - 1)] = yp_bdry @ ym_to_yp_all_vars @ val + state_pred_.get((key[0], key[1] - 1), arr)
+
+        for key, val in state_pred_.items():
+            # state_pred_[key] = M2_inv @ val
+            state_pred_[key] = np.linalg.solve(M2, val)
+
+        del state_pred
+        state_pred = state_pred_
+
+    eigs_all = []
+    for i in range(0, x_shifts.size, batch_size):
+
+        j = min(i + batch_size, x_shifts.size)
+
+        mat = None
+        for key, val in state_pred.items():
+            if mat is None:
+                mat = (from_st_last_all_vars @ val)[None] * (np.exp(key[0] * x_shifts) * np.exp(key[1] * y_shifts))[:, None, None]
+            else:
+                mat += (from_st_last_all_vars @ val)[None] * (np.exp(key[0] * x_shifts) * np.exp(key[1] * y_shifts))[:, None, None]
+
+        eigs = np.linalg.eigvals(mat)
+        eigs_all.extend(eigs)
+
+    return abs(np.array(eigs_all)).max()
 
 
-def para_von_neumann_analysis(solver, cfl, nk):
+def para_von_neumann_analysis(solver, cfl, niter, nk, batch_size=10_000):
     shifts = np.linspace(0.0, 2 * np.pi, nk) * 1.0j
     x_shifts, y_shifts = np.meshgrid(shifts, shifts)
     x_shifts = x_shifts.ravel()
@@ -257,7 +255,7 @@ def para_von_neumann_analysis(solver, cfl, nk):
     x_shifts = x_shifts[mask][rank::ncpus]
     y_shifts = y_shifts[mask][rank::ncpus]
 
-    amp = von_neumann_analysis(solver, cfl, x_shifts, y_shifts)
+    amp = von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=batch_size)
     max_amp = comm.reduce(amp, op=MPI.MAX, root=0)
 
     max_amp = comm.bcast(max_amp, root=0)
@@ -265,15 +263,15 @@ def para_von_neumann_analysis(solver, cfl, nk):
     return max_amp
 
 
-def max_cfl(solver, nk):
+def max_cfl(solver, niter, nk, batch_size=10_000):
 
-    hi = 0.1
+    hi = 2.0
     lo = 1e-6
 
-    for _ in range(15):
+    for _ in range(10):
 
         mid = 0.5 * (lo + hi)
-        max_amp = para_von_neumann_analysis(solver, mid, nk)
+        max_amp = para_von_neumann_analysis(solver, mid, niter, nk, batch_size=batch_size)
 
         if max_amp > (1 + EPS):
             hi = mid
@@ -282,30 +280,31 @@ def max_cfl(solver, nk):
 
     return lo
 
-if rank == 0:
-    print(f'Stability threshold = 1 + {EPS}')
 
-solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=3)
-cfl = max_cfl(solver, nk=nk)
-if rank == 0:
-    print(f'Order {solver.poly_order} regular ADER-DG max CFL: {cfl:.5f}.')
+for poly_order in range(3, order+1):
 
-solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=4)
-cfl = max_cfl(solver, nk=nk)
-if rank == 0:
-    print(f'Order {solver.poly_order} regular ADER-DG max CFL: {cfl:.5f}.')
+    if poly_order == 3:
+        cfls = np.linspace(1e-5, 0.8, 40)
+    elif poly_order == 4:
+        cfls = np.linspace(1e-5, 0.5, 40)
+    elif poly_order == 5:
+        cfls = np.linspace(1e-5, 0.4, 40)
+    elif poly_order == 6:
+        cfls = np.linspace(1e-5, 0.3, 40)
+    elif poly_order == 7:
+        cfls = np.linspace(1e-5, 0.3, 40)
 
-solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=5)
-cfl = max_cfl(solver, nk=nk)
-if rank == 0:
-    print(f'Order {solver.poly_order} regular ADER-DG max CFL: {cfl:.5f}.')
+    solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=poly_order)
+    if rank == 0:
+        print('Running order =', solver.poly_order)
 
-solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=6)
-cfl = max_cfl(solver, nk=nk)
-if rank == 0:
-    print(f'Order {solver.poly_order} regular ADER-DG max CFL: {cfl:.5f}.')
+    amps = [para_von_neumann_analysis(solver, cfl, 3, nk) for cfl in cfls]
+    plt.plot(cfls, np.array(amps) - 1, '-', label=f'Order {solver.poly_order}')
 
-solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=7)
-cfl = max_cfl(solver, nk=nk)
-if rank == 0:
-    print(f'Order {solver.poly_order} regular ADER-DG max CFL: {cfl:.5f}.')
+plt.yscale('symlog', linthresh=1e-14)
+plt.ylabel("Amplification factor")
+plt.xlabel("CFL")
+plt.legend()
+plt.grid()
+plt.title('New method (non-conservative) stability')
+plt.savefig(os.path.join(plot_dir, f"wave-non-cons-2D-order-{order}-amplification-minus-one.png"))
