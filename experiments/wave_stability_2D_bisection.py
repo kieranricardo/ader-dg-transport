@@ -15,7 +15,7 @@ import argparse
 
 import argparse
 
-EPS = 1e-4
+EPS = 1e-6
 comm = MPI.COMM_WORLD
 
 parser = argparse.ArgumentParser()
@@ -256,7 +256,7 @@ def max_cfl(solver, niter, nk, batch_size=10_000):
     hi = 2.0
     lo = 1e-6
 
-    for _ in range(10):
+    for _ in range(20):
 
         mid = 0.5 * (lo + hi)
         max_amp = para_von_neumann_analysis(solver, mid, niter, nk, batch_size=batch_size)
@@ -271,9 +271,18 @@ def max_cfl(solver, niter, nk, batch_size=10_000):
 if rank == 0:
     print(f'Stability threshold = 1 + {EPS}')
 
-solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=order)
-for niter in range(3, 5):
+# solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=order)
+# for niter in range(3, 5):
 
+#     cfl = max_cfl(solver, niter, nk=nk)
+#     if rank == 0:
+#         print(f'Order {solver.poly_order} with {niter} iterations max CFL: {cfl:.5f}. Communication eff: {cfl / niter:.5f}. Compute eff: {cfl / (niter + 1):.5f}')
+
+#     comm.barrier()
+
+niter = 3
+for poly_order in range(3, order + 1):
+    solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=poly_order)
     cfl = max_cfl(solver, niter, nk=nk)
     if rank == 0:
         print(f'Order {solver.poly_order} with {niter} iterations max CFL: {cfl:.5f}. Communication eff: {cfl / niter:.5f}. Compute eff: {cfl / (niter + 1):.5f}')
