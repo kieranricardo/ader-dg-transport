@@ -1,7 +1,8 @@
 import numpy as np
 from scipy.linalg import lu_factor, lu_solve
 from scipy.interpolate import lagrange
-from ader_dg.ader_dg_2D.base_ader_dg_2D import BaseADERDG2D
+from ader_dg_transport.ader_dg_2D.base_ader_dg_2D import BaseADERDG2D
+
 
 class WaveStandardAderDG2D(BaseADERDG2D):
 
