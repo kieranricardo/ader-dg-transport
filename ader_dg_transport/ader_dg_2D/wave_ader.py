@@ -4,7 +4,7 @@ from scipy.interpolate import lagrange
 from ader_dg_transport.ader_dg_2D.base_ader_dg_2D import BaseADERDG2D
 
 
-class WaveImplicitAderDG2D(BaseADERDG2D):
+class WaveAderDG2D(BaseADERDG2D):
 
     def __init__(self, xlim, nx, poly_order, c, dt, f=0.0):
 

@@ -58,24 +58,7 @@ class WaveStandardAderDG2D(BaseADERDG2D):
         self.M1[h_slice, u_slice] += self.x_cfl * Dx
         self.M1[h_slice, v_slice] += self.y_cfl * Dy
 
-        self.M_nc = np.copy(self.M1)
-        # dudt + dhdx = 0
-        self.M_nc[u_slice, h_slice] += 0.5 * self.x_cfl * (xm_integral - xp_integral)
-        # dvdt + dhdy = 0
-        self.M_nc[v_slice, h_slice] += 0.5 * self.y_cfl * (ym_integral - yp_integral)
-        # dhdt + dudx + dvdy = 0
-        self.M_nc[h_slice, u_slice] += 0.5 * self.x_cfl * (xm_integral - xp_integral)
-        self.M_nc[h_slice, v_slice] += 0.5 * self.y_cfl * (ym_integral - yp_integral)
-
-        # dissipation terms
-        # 0.5 * c * u * dy * dt
-        self.M_nc[u_slice, u_slice] += 0.5 * self.x_cfl * (xm_integral + xp_integral)
-        self.M_nc[v_slice, v_slice] += 0.5 * self.y_cfl * (ym_integral + yp_integral)
-        self.M_nc[h_slice, h_slice] += 0.5 * self.x_cfl * (xm_integral + xp_integral)
-        self.M_nc[h_slice, h_slice] += 0.5 * self.y_cfl * (ym_integral + yp_integral)
-
         self.M1_lu = lu_factor(self.M1)
-        self.M_nc_lu = lu_factor(self.M_nc)
 
     def time_step(self):
 
