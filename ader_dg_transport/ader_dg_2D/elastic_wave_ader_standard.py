@@ -121,7 +121,7 @@ class ElasticWaveStandardAderDG2D(BaseADERDG2D):
         oxy_hat = 0.5 * (oxy[ip] + oxy[im]) + 0.5 * self.rho * self.cs * (v[ip] - v[im])
 
         # x boundaries
-        # s characteristics
+        # p characteristics
         fluxp = -(1 / self.rho) * oxx[ip]
         fluxm = -(1 / self.rho) * oxx[im]
         num_flux = -(1 / self.rho) * oxx_hat
@@ -140,7 +140,7 @@ class ElasticWaveStandardAderDG2D(BaseADERDG2D):
         oyy_bdry[ip] += self.x_cfl * (num_flux - fluxp) / self.weights_x[-1]
         oyy_bdry[im] -= self.x_cfl * (num_flux - fluxm) / self.weights_x[-1]
 
-        # p characteristics
+        # s characteristics
         fluxp = -(1 / self.rho) * oxy[ip]
         fluxm = -(1 / self.rho) * oxy[im]
         num_flux = -(1 / self.rho) * oxy_hat
