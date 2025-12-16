@@ -7,6 +7,7 @@ from ader_dg_transport.ader_dg_3D.base_ader_dg_3D import BaseADERDG3D
 from mpi4py import MPI
 import argparse
 import time
+import scipy
 
 EPS = 1e-4
 comm = MPI.COMM_WORLD
@@ -140,144 +141,153 @@ def von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, z_shifts, batch
     M2[h_slice, h_slice] += 0.5 * y_cfl * (ym_integral + yp_integral)
     M2[h_slice, h_slice] += 0.5 * z_cfl * (zm_integral + zp_integral)
 
-    # M1_inv = np.linalg.inv(M1)
-    # M2_inv = np.linalg.inv(M2)
+    inv_M1 = scipy.sparse.linalg.splu(scipy.sparse.bsr_array(M1))
+    inv_M2 = scipy.sparse.linalg.splu(scipy.sparse.bsr_array(M2))
+    del M1, M2, 
 
-    to_st_first_all_vars = np.zeros((nvars * sz, nvars * n ** (dim - 1)))
+    comm.barrier()
+    if rank == 0:
+        print('M1 and M2 done')
+    comm.barrier()
+
+    del Dt, Dx, Dy, Dz, last_space_integral
+
+    to_st_first, to_st_last, from_st_first, from_st_last, xp_to_xm, yp_to_ym, zp_to_zm, xm_to_xp, ym_to_yp, zm_to_zp = get_matrices(solver.poly_order)
+
+    t_bdry = np.zeros((nvars * sz, nvars * n ** (dim - 1)))
+    tmp = first_space_integral @ to_st_first
     for i in range(nvars):
-        to_st_first_all_vars[i * sz:(i + 1) * sz, i * n ** (dim - 1):(i + 1) * n ** (dim - 1)] = to_st_first
+        t_bdry[i * sz:(i + 1) * sz, i * n ** (dim - 1):(i + 1) * n ** (dim - 1)] = tmp
+    del tmp
 
-    from_st_last_all_vars = np.zeros((nvars * n ** (dim - 1), nvars * sz))
+    tmp = np.zeros((nvars * n ** (dim - 1), nvars * sz))
     for i in range(nvars):
-        from_st_last_all_vars[i * n ** (dim - 1):(i + 1) * n ** (dim - 1), i * sz:(i + 1) * sz] = from_st_last
+        tmp[i * n ** (dim - 1):(i + 1) * n ** (dim - 1), i * sz:(i + 1) * sz] = from_st_last
+    from_st_last_all_vars = scipy.sparse.bsr_array(tmp)
+    del tmp
 
-    xp_to_xm_all_vars = np.zeros((nvars * sz, nvars * sz))
-    for i in range(nvars):
-        xp_to_xm_all_vars[i * sz:(i + 1) * sz, i * sz:(i + 1) * sz] = xp_to_xm
+    comm.barrier()
+    if rank == 0:
+        print('all vars done')
+    comm.barrier()
 
-    xm_to_xp_all_vars = np.zeros((nvars * sz, nvars * sz))
-    for i in range(nvars):
-        xm_to_xp_all_vars[i * sz:(i + 1) * sz, i * sz:(i + 1) * sz] = xm_to_xp
+    del first_space_integral
 
-    yp_to_ym_all_vars = np.zeros((nvars * sz, nvars * sz))
-    for i in range(nvars):
-        yp_to_ym_all_vars[i * sz:(i + 1) * sz, i * sz:(i + 1) * sz] = yp_to_ym
+    #####
+    xm_bdry = np.zeros((nvars * sz, nvars * sz))
+    tmp = xm_integral @ xp_to_xm
+    xm_bdry[u_slice, h_slice] += 0.5 * x_cfl * tmp
+    xm_bdry[h_slice, u_slice] += 0.5 * x_cfl * tmp
 
-    ym_to_yp_all_vars = np.zeros((nvars * sz, nvars * sz))
-    for i in range(nvars):
-        ym_to_yp_all_vars[i * sz:(i + 1) * sz, i * sz:(i + 1) * sz] = ym_to_yp
+    xm_bdry[u_slice, u_slice] += 0.5 * x_cfl * tmp
+    xm_bdry[h_slice, h_slice] += 0.5 * x_cfl * tmp
 
-    zp_to_zm_all_vars = np.zeros((nvars * sz, nvars * sz))
-    for i in range(nvars):
-        zp_to_zm_all_vars[i * sz:(i + 1) * sz, i * sz:(i + 1) * sz] = zp_to_zm
+    xm_bdry_sps = scipy.sparse.bsr_array(xm_bdry)
+    del tmp, xm_integral, xp_to_xm, xm_bdry
+    
+    #####
+    xp_bdry = np.zeros((nvars * sz, nvars * sz))
+    tmp = xp_integral @ xm_to_xp
+    xp_bdry[u_slice, h_slice] += 0.5 * x_cfl * (- tmp)
+    xp_bdry[h_slice, u_slice] += 0.5 * x_cfl * (- tmp)
 
-    zm_to_zp_all_vars = np.zeros((nvars * sz, nvars * sz))
-    for i in range(nvars):
-        zm_to_zp_all_vars[i * sz:(i + 1) * sz, i * sz:(i + 1) * sz] = zm_to_zp
+    xp_bdry[u_slice, u_slice] += 0.5 * x_cfl * tmp
+    xp_bdry[h_slice, h_slice] += 0.5 * x_cfl * tmp
 
-    t_bdry = np.zeros((nvars * sz, nvars * sz))
-    t_bdry[u_slice, u_slice] += first_space_integral
-    t_bdry[v_slice, v_slice] += first_space_integral
-    t_bdry[w_slice, w_slice] += first_space_integral
-    t_bdry[h_slice, h_slice] += first_space_integral
+    xp_bdry_sps = scipy.sparse.bsr_array(xp_bdry)
+    del tmp, xp_integral, xm_to_xp, xp_bdry
 
-    xm_bdry = np.zeros_like(t_bdry)
-    xp_bdry = np.zeros_like(t_bdry)
-    ym_bdry = np.zeros_like(t_bdry)
-    yp_bdry = np.zeros_like(t_bdry)
-    zm_bdry = np.zeros_like(t_bdry)
-    zp_bdry = np.zeros_like(t_bdry)
+    #####
+    ym_bdry = np.zeros((nvars * sz, nvars * sz))
+    tmp = ym_integral @ yp_to_ym
+    ym_bdry[v_slice, h_slice] += 0.5 * y_cfl * tmp
+    ym_bdry[h_slice, v_slice] += 0.5 * y_cfl * tmp
 
-    xm_bdry[u_slice, h_slice] += 0.5 * x_cfl * xm_integral
-    xm_bdry[h_slice, u_slice] += 0.5 * x_cfl * xm_integral
+    ym_bdry[v_slice, v_slice] += 0.5 * y_cfl * tmp
+    ym_bdry[h_slice, h_slice] += 0.5 * y_cfl * tmp
 
-    xm_bdry[u_slice, u_slice] += 0.5 * x_cfl * xm_integral
-    xm_bdry[h_slice, h_slice] += 0.5 * x_cfl * xm_integral
+    ym_bdry_sps = scipy.sparse.bsr_array(ym_bdry)
+    del tmp, ym_integral, yp_to_ym, ym_bdry
 
-    #############
-    xp_bdry[u_slice, h_slice] += 0.5 * x_cfl * (- xp_integral)
-    xp_bdry[h_slice, u_slice] += 0.5 * x_cfl * (- xp_integral)
+    ######
+    yp_bdry = np.zeros((nvars * sz, nvars * sz))
+    tmp = yp_integral @ ym_to_yp
+    yp_bdry[v_slice, h_slice] += 0.5 * y_cfl * (- tmp)
+    yp_bdry[h_slice, v_slice] += 0.5 * y_cfl * (- tmp)
 
-    xp_bdry[u_slice, u_slice] += 0.5 * x_cfl * xp_integral
-    xp_bdry[h_slice, h_slice] += 0.5 * x_cfl * xp_integral
+    yp_bdry[v_slice, v_slice] += 0.5 * y_cfl * tmp
+    yp_bdry[h_slice, h_slice] += 0.5 * y_cfl * tmp
 
-    #############
-    ym_bdry[v_slice, h_slice] += 0.5 * y_cfl * ym_integral
-    ym_bdry[h_slice, v_slice] += 0.5 * y_cfl * ym_integral
+    yp_bdry_sps = scipy.sparse.bsr_array(yp_bdry)
+    del tmp, yp_integral, ym_to_yp, yp_bdry
 
-    ym_bdry[v_slice, v_slice] += 0.5 * y_cfl * ym_integral
-    ym_bdry[h_slice, h_slice] += 0.5 * y_cfl * ym_integral
+    #####
+    zm_bdry = np.zeros((nvars * sz, nvars * sz))
+    tmp = zm_integral @ zp_to_zm
+    zm_bdry[w_slice, h_slice] += 0.5 * z_cfl * tmp
+    zm_bdry[h_slice, w_slice] += 0.5 * z_cfl * tmp
 
-    #############
-    yp_bdry[v_slice, h_slice] += 0.5 * y_cfl * (- yp_integral)
-    yp_bdry[h_slice, v_slice] += 0.5 * y_cfl * (- yp_integral)
+    zm_bdry[w_slice, w_slice] += 0.5 * z_cfl * tmp
+    zm_bdry[h_slice, h_slice] += 0.5 * z_cfl * tmp
 
-    yp_bdry[v_slice, v_slice] += 0.5 * y_cfl * yp_integral
-    yp_bdry[h_slice, h_slice] += 0.5 * y_cfl * yp_integral
+    zm_bdry_sps = scipy.sparse.bsr_array(zm_bdry)
+    del tmp, zm_integral, zp_to_zm, zm_bdry
 
-    #############
-    zm_bdry[w_slice, h_slice] += 0.5 * z_cfl * zm_integral
-    zm_bdry[h_slice, w_slice] += 0.5 * z_cfl * zm_integral
+    ######
+    zp_bdry = np.zeros((nvars * sz, nvars * sz))
+    tmp = zp_integral @ zm_to_zp
+    zp_bdry[w_slice, h_slice] += 0.5 * z_cfl * (- tmp)
+    zp_bdry[h_slice, w_slice] += 0.5 * z_cfl * (- tmp)
 
-    zm_bdry[w_slice, w_slice] += 0.5 * z_cfl * zm_integral
-    zm_bdry[h_slice, h_slice] += 0.5 * z_cfl * zm_integral
+    zp_bdry[w_slice, w_slice] += 0.5 * z_cfl * tmp
+    zp_bdry[h_slice, h_slice] += 0.5 * z_cfl * tmp
 
-    #############
-    zp_bdry[w_slice, h_slice] += 0.5 * z_cfl * (- zp_integral)
-    zp_bdry[h_slice, w_slice] += 0.5 * z_cfl * (- zp_integral)
-
-    zp_bdry[w_slice, w_slice] += 0.5 * z_cfl * zp_integral
-    zp_bdry[h_slice, h_slice] += 0.5 * z_cfl * zp_integral
-
-    ##############
-    xm_bdry = xm_bdry @ xp_to_xm_all_vars
-    xp_bdry = xp_bdry @ xm_to_xp_all_vars
-
-    ym_bdry = ym_bdry @ yp_to_ym_all_vars
-    yp_bdry = yp_bdry @ ym_to_yp_all_vars
-
-    zm_bdry = zm_bdry @ zp_to_zm_all_vars
-    zp_bdry = zp_bdry @ zm_to_zp_all_vars
+    zp_bdry_sps = scipy.sparse.bsr_array(zp_bdry)
+    del tmp, zp_integral, zm_to_zp, zp_bdry
 
     t1 = time.time()
-    # print(f"Setup time: {t1 - t0}")
+    if rank == 0:
+        print(f"Setup time: {t1 - t0}")
 
     arr = np.zeros((nvars * sz, nvars * n ** (dim - 1)))
     state_pred = dict()
-    state_pred[(0, 0, 0)] = t_bdry @ to_st_first_all_vars
+    state_pred[(0, 0, 0)] = t_bdry
 
-    for key in state_pred.keys():
-        state_pred[key] = np.linalg.solve(M1, state_pred[key])
+    for key, val in state_pred.items():
+        state_pred[key] =  inv_M1.solve(val)
 
     for _ in range(niter):
 
         state_pred_ = dict()
-        state_pred_[(0, 0, 0)] = t_bdry @ to_st_first_all_vars
+        state_pred_[(0, 0, 0)] = t_bdry
 
         for key, val in state_pred.items():
             new_key = (key[0] + 1, key[1], key[2])
-            state_pred_[new_key] = xm_bdry @ val + state_pred_.get(new_key, arr)
+            state_pred_[new_key] = xm_bdry_sps @ val + state_pred_.get(new_key, arr)
             new_key = (key[0] - 1, key[1], key[2])
-            state_pred_[new_key] = xp_bdry @ val + state_pred_.get(new_key, arr)
+            state_pred_[new_key] = xp_bdry_sps @ val + state_pred_.get(new_key, arr)
 
             new_key = (key[0], key[1] + 1, key[2])
-            state_pred_[new_key] = ym_bdry @ val + state_pred_.get(new_key, arr)
+            state_pred_[new_key] = ym_bdry_sps @ val + state_pred_.get(new_key, arr)
             new_key = (key[0], key[1] - 1, key[2])
-            state_pred_[new_key] = yp_bdry @ val + state_pred_.get(new_key, arr)
+            state_pred_[new_key] = yp_bdry_sps @ val + state_pred_.get(new_key, arr)
 
             new_key = (key[0], key[1], key[2] + 1)
-            state_pred_[new_key] = zm_bdry @ val + state_pred_.get(new_key, arr)
+            state_pred_[new_key] = zm_bdry_sps @ val + state_pred_.get(new_key, arr)
             new_key = (key[0], key[1], key[2] - 1)
-            state_pred_[new_key] = zp_bdry @ val + state_pred_.get(new_key, arr)
+            state_pred_[new_key] = zp_bdry_sps @ val + state_pred_.get(new_key, arr)
 
         for key, val in state_pred_.items():
-            state_pred_[key] = np.linalg.solve(M2, val)
+            state_pred_[key] = inv_M2.solve(val)
 
+        for key, val in state_pred.items():
+            del val
         del state_pred
         state_pred = state_pred_
 
     t2 = time.time()
-    # print(f"Mat time: {t2 - t1}")
+    if rank == 0:
+        print(f"Mat time: {t2 - t1}")
 
     eigs_all = []
     for i in range(0, x_shifts.size, batch_size):
@@ -296,8 +306,9 @@ def von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, z_shifts, batch
         eigs_all.extend(eigs)
 
     t3 = time.time()
-    # print(f"Eig time: {t3 - t2}")
-    # print()
+    if rank == 0:
+        print(f"Eig time: {t3 - t2}")
+        print()
 
     return abs(np.array(eigs_all)).max()
 
@@ -353,7 +364,8 @@ if rank == 0:
 #     comm.barrier()
 
 niter = 3
-for poly_order in range(3, order + 1):
+# for poly_order in range(3, order + 1):
+for poly_order in range(order, order + 1):
     solver = BaseADERDG3D(xlim=1.0, ylim=1.0, zlim=1.0, nx=3, ny=3, nz=3, poly_order=poly_order)
     cfl = max_cfl(solver, niter, nk=nk)
     if rank == 0:
