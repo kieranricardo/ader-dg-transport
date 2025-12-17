@@ -228,6 +228,7 @@ def von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=10_0
         state_pred = state_pred_
 
     eigs_all = []
+    singvals_all = []
     for i in range(0, x_shifts.size, batch_size):
 
         j = min(i + batch_size, x_shifts.size)
@@ -242,7 +243,10 @@ def von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=10_0
         eigs = np.linalg.eigvals(mat)
         eigs_all.extend(eigs)
 
-    return abs(np.array(eigs_all)).max()
+        singvals = np.linalg.svd(mat, compute_uv=False)
+        singvals_all.extend(singvals)
+
+    return abs(np.array(eigs_all)).max(), abs(np.array(singvals_all)).max()
 
 
 def para_von_neumann_analysis(solver, cfl, niter, nk, batch_size=10_000):
@@ -255,12 +259,14 @@ def para_von_neumann_analysis(solver, cfl, niter, nk, batch_size=10_000):
     x_shifts = x_shifts[mask][rank::ncpus]
     y_shifts = y_shifts[mask][rank::ncpus]
 
-    amp = von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=batch_size)
-    max_amp = comm.reduce(amp, op=MPI.MAX, root=0)
+    amp1, amp2 = von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, batch_size=batch_size)
+    max_amp1 = comm.reduce(amp1, op=MPI.MAX, root=0)
+    max_amp2 = comm.reduce(amp2, op=MPI.MAX, root=0)
 
-    max_amp = comm.bcast(max_amp, root=0)
+    max_amp1 = comm.bcast(max_amp1, root=0)
+    max_amp2 = comm.bcast(max_amp2, root=0)
 
-    return max_amp
+    return max_amp1, max_amp2
 
 
 def max_cfl(solver, niter, nk, batch_size=10_000):
@@ -299,7 +305,11 @@ for poly_order in range(3, order+1):
         print('Running order =', solver.poly_order)
 
     amps = [para_von_neumann_analysis(solver, cfl, 3, nk) for cfl in cfls]
-    plt.plot(cfls, np.array(amps) - 1, '-', label=f'Order {solver.poly_order}')
+    amps1 = [t[0] for t in amps]
+    amps2 = [t[1] for t in amps]
+    plt.plot(cfls, np.array(amps1) - 1, '-', label=f'Order {solver.poly_order} max eigval')
+    plt.plot(cfls, np.array(amps2) - 1, '-', label=f'Order {solver.poly_order} max singval')
+
 
 plt.yscale('symlog', linthresh=1e-14)
 plt.ylabel("Amplification factor")

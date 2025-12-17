@@ -251,11 +251,11 @@ def von_neumann_analysis(solver, cfl, x_shifts, y_shifts, verbose=False):
     
     t0 = time.time()
     eigs = np.linalg.eigvals(mat)
-    
+    singvals = np.linalg.svd(mat, compute_uv=False)
     if verbose:
         print('Eig time:', time.time() - t0)
 
-    return abs(eigs).max()
+    return abs(eigs).max(), abs(singvals).max()
 
 
 def para_von_neumann_analysis(solver, cfl, nk):
@@ -268,12 +268,15 @@ def para_von_neumann_analysis(solver, cfl, nk):
     x_shifts = x_shifts[mask][rank::ncpus]
     y_shifts = y_shifts[mask][rank::ncpus]
 
-    amp = von_neumann_analysis(solver, cfl, x_shifts, y_shifts)
-    max_amp = comm.reduce(amp, op=MPI.MAX, root=0)
+    amp1, amp2 = von_neumann_analysis(solver, cfl, x_shifts, y_shifts)
 
-    max_amp = comm.bcast(max_amp, root=0)
+    max_amp1 = comm.reduce(amp1, op=MPI.MAX, root=0)
+    max_amp2 = comm.reduce(amp2, op=MPI.MAX, root=0)
 
-    return max_amp
+    max_amp1 = comm.bcast(max_amp1, root=0)
+    max_amp2 = comm.bcast(max_amp2, root=0)
+
+    return max_amp1, max_amp2
 
 
 for poly_order in range(3, order+1):
@@ -293,7 +296,10 @@ for poly_order in range(3, order+1):
     if rank == 0:
         print('Running order =', solver.poly_order)
     amps = [para_von_neumann_analysis(solver, cfl, nk) for cfl in cfls]
-    plt.plot(cfls, np.array(amps) - 1, '-', label=f'Order {solver.poly_order}')
+    amps1 = [t[0] for t in amps]
+    amps2 = [t[1] for t in amps]
+    plt.plot(cfls, np.array(amps1) - 1, '-', label=f'Order {solver.poly_order} max eigval')
+    plt.plot(cfls, np.array(amps2) - 1, '-', label=f'Order {solver.poly_order} max singval')
 
 plt.yscale('symlog', linthresh=1e-14)
 plt.ylabel("Amplification factor")

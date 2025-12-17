@@ -296,7 +296,8 @@ def von_neumann_analysis(solver, cfl, niter, x_shifts, y_shifts, z_shifts, batch
 
         mat = None
         for key, val in state_pred.items():
-            exp_part = np.exp(key[0] * x_shifts) * np.exp(key[1] * y_shifts) * np.exp(key[2] * z_shifts)
+            exp_part = np.exp(key[0] * x_shifts[i:j]) * np.exp(key[1] * y_shifts[i:j]) * np.exp(key[2] * z_shifts[i:j])
+
             if mat is None:
                 mat = (from_st_last_all_vars @ val)[None] * exp_part[:, None, None]
             else:
@@ -365,9 +366,9 @@ if rank == 0:
 
 niter = 3
 # for poly_order in range(3, order + 1):
-for poly_order in range(order, order + 1):
+for poly_order in range(3, order + 1):
     solver = BaseADERDG3D(xlim=1.0, ylim=1.0, zlim=1.0, nx=3, ny=3, nz=3, poly_order=poly_order)
-    cfl = max_cfl(solver, niter, nk=nk)
+    cfl = max_cfl(solver, niter, nk=nk, batch_size=500)
     if rank == 0:
         print(f'Order {solver.poly_order} with {niter} iterations max CFL: {cfl:.5f}. Communication eff: {cfl / niter:.5f}. Compute eff: {cfl / (niter + 1):.5f}')
 
