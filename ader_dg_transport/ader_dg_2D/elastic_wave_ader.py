@@ -8,10 +8,7 @@ class ElasticWaveAderDG2D(BaseADERDG2D):
 
     nvars = 5
 
-    def __init__(self, xlim, nx, poly_order, rho, L, mu, dt):
-
-        ylim = xlim
-        ny = nx
+    def __init__(self, xlim, ylim, nx, ny, poly_order, rho, L, mu, dt, y_periodic=True):
 
         BaseADERDG2D.__init__(self, xlim, ylim, nx, ny, poly_order)
 
@@ -21,13 +18,13 @@ class ElasticWaveAderDG2D(BaseADERDG2D):
         self.rho = rho
         self.cp = np.sqrt(self.Lmu / self.rho)
         self.cs = np.sqrt(mu / self.rho)
+        self.y_periodic = y_periodic
 
         self.C_mat = np.array([
             self.Lmu, self.L, 0.0,
              self.L, self.Lmu, 0.0,
              0.0, 0.0, self.mu
             ]).reshape((3, 3))
-        print(self.C_mat.shape)
         self.S_mat = np.linalg.inv(self.C_mat)
 
         self.dt = dt
@@ -99,6 +96,69 @@ class ElasticWaveAderDG2D(BaseADERDG2D):
         self.M_nc[v_slice, v_slice] += 0.5 * self.x_cfl * (xm_integral + xp_integral) * self.cs
         self.M_nc[oxy_slice, oxy_slice] += 0.5 * self.x_cfl * (xm_integral + xp_integral) * self.cs
 
+        if not self.y_periodic:
+            # M1 top and bottom
+            self.M1_top = self.M1.copy()
+            # self.M1_top[oyy_slice, oyy_slice] += self.y_cfl * self.cp * yp_integral
+            # self.M1_top[oxy_slice, oxy_slice] += self.y_cfl * self.cs * yp_integral
+            # self.M1_top[oxx_slice, oyy_slice] += self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * yp_integral
+
+            self.M1_top[u_slice, oxy_slice] += self.y_cfl * yp_integral / self.rho
+            self.M1_top[v_slice, oyy_slice] += self.y_cfl * yp_integral / self.rho
+
+            self.M1_bot = self.M1.copy()
+            # self.M1_bot[oyy_slice, oyy_slice] += self.y_cfl * self.cp * ym_integral
+            # self.M1_bot[oxy_slice, oxy_slice] += self.y_cfl * self.cs * ym_integral
+            # self.M1_bot[oxx_slice, oyy_slice] += self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * ym_integral
+
+            self.M1_bot[u_slice, oxy_slice] += -self.y_cfl * ym_integral / self.rho
+            self.M1_bot[v_slice, oyy_slice] += -self.y_cfl * ym_integral / self.rho
+
+            # M_nc top and bottom
+            self.M_nc_top = self.M_nc.copy()
+            # boundary
+            # self.M_nc_top[oyy_slice, oyy_slice] += self.y_cfl * self.cp * yp_integral
+            # self.M_nc_top[oxy_slice, oxy_slice] += self.y_cfl * self.cs * yp_integral
+            # self.M_nc_top[oxx_slice, oyy_slice] += self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * yp_integral
+            self.M_nc_top[u_slice, oxy_slice] += self.y_cfl * yp_integral / self.rho
+            self.M_nc_top[v_slice, oyy_slice] += self.y_cfl * yp_integral / self.rho
+            # interface
+            self.M_nc_top[v_slice, oyy_slice] += 0.5 * self.y_cfl * (ym_integral) * (-1 / self.rho)
+            self.M_nc_top[oyy_slice, v_slice] += 0.5 * self.y_cfl * (ym_integral) * (-self.Lmu)
+            self.M_nc_top[oxx_slice, v_slice] += 0.5 * self.y_cfl * (ym_integral) * (-self.L)
+            self.M_nc_top[u_slice, oxy_slice] += 0.5 * self.y_cfl * (ym_integral) * (-1 / self.rho)
+            self.M_nc_top[oxy_slice, u_slice] += 0.5 * self.y_cfl * (ym_integral) * (-self.mu)
+            self.M_nc_top[v_slice, v_slice] += 0.5 * self.y_cfl * (ym_integral) * self.cp
+            self.M_nc_top[oyy_slice, oyy_slice] += 0.5 * self.y_cfl * (ym_integral) * self.cp
+            self.M_nc_top[oxx_slice, oyy_slice] += 0.5 * self.y_cfl * (ym_integral) * (self.L * (self.cp / self.Lmu))
+            self.M_nc_top[u_slice, u_slice] += 0.5 * self.y_cfl * (ym_integral) * self.cs
+            self.M_nc_top[oxy_slice, oxy_slice] += 0.5 * self.y_cfl * (ym_integral) * self.cs
+
+            self.M_nc_bot = self.M_nc.copy()
+            # boundary
+            # self.M_nc_bot[oyy_slice, oyy_slice] += self.y_cfl * self.cp * ym_integral
+            # self.M_nc_bot[oxy_slice, oxy_slice] += self.y_cfl * self.cs * ym_integral
+            # self.M_nc_bot[oxx_slice, oyy_slice] += self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * ym_integral
+            self.M_nc_bot[u_slice, oxy_slice] += -self.y_cfl * ym_integral / self.rho
+            self.M_nc_bot[v_slice, oyy_slice] += -self.y_cfl * ym_integral / self.rho
+            # interface
+            self.M_nc_bot[v_slice, oyy_slice] += 0.5 * self.y_cfl * ( - yp_integral) * (-1 / self.rho)
+            self.M_nc_bot[oyy_slice, v_slice] += 0.5 * self.y_cfl * ( - yp_integral) * (-self.Lmu)
+            self.M_nc_bot[oxx_slice, v_slice] += 0.5 * self.y_cfl * ( - yp_integral) * (-self.L)
+            self.M_nc_bot[u_slice, oxy_slice] += 0.5 * self.y_cfl * ( - yp_integral) * (-1 / self.rho)
+            self.M_nc_bot[oxy_slice, u_slice] += 0.5 * self.y_cfl * ( - yp_integral) * (-self.mu)
+            self.M_nc_bot[v_slice, v_slice] += 0.5 * self.y_cfl * ( + yp_integral) * self.cp
+            self.M_nc_bot[oyy_slice, oyy_slice] += 0.5 * self.y_cfl * ( + yp_integral) * self.cp
+            self.M_nc_bot[oxx_slice, oyy_slice] += 0.5 * self.y_cfl * ( + yp_integral) * (self.L * (self.cp / self.Lmu))
+            self.M_nc_bot[u_slice, u_slice] += 0.5 * self.y_cfl * ( + yp_integral) * self.cs
+            self.M_nc_bot[oxy_slice, oxy_slice] += 0.5 * self.y_cfl * ( + yp_integral) * self.cs
+
+            self.M1_top_lu = lu_factor(self.M1_top)
+            self.M1_bot_lu = lu_factor(self.M1_bot)
+
+            self.M_nc_top_lu = lu_factor(self.M_nc_top)
+            self.M_nc_bot_lu = lu_factor(self.M_nc_bot)
+
         # y bdry fluxes
         ## centred part
         self.M_nc[v_slice, oyy_slice] += 0.5 * self.y_cfl * (ym_integral - yp_integral) * (-1 / self.rho)
@@ -116,9 +176,16 @@ class ElasticWaveAderDG2D(BaseADERDG2D):
         self.M1_lu = lu_factor(self.M1)
         self.M_nc_lu = lu_factor(self.M_nc)
 
-    def time_step(self):
+    def time_step(self, forcing_func=None):
 
         rhs_in = self.get_rhs(self.state)
+
+        if forcing_func is not None:
+            ts = self.ts + self.time
+            F = forcing_func(self.xs, self.ys, ts) * self.dt * 0.5
+            rhs_in += F
+
+
         state_pred = self.preconditioner(rhs_in)
 
         for _ in range(3):
@@ -147,7 +214,8 @@ class ElasticWaveAderDG2D(BaseADERDG2D):
         self._xbdry_nc(bdry_integrals, state_in, self.xp_int, self.xm_int)
         self._xbdry_nc(bdry_integrals, state_in, self.xp_ext, self.xm_ext)
         self._ybdry_nc(bdry_integrals, state_in, self.yp_int, self.ym_int)
-        self._ybdry_nc(bdry_integrals, state_in, self.yp_ext, self.ym_ext)
+        if self.y_periodic:
+            self._ybdry_nc(bdry_integrals, state_in, self.yp_ext, self.ym_ext)
 
         # rhs = bdry_integrals.reshape(self.nx * self.ny, -1)
         # state_out = np.einsum('ab,nb->na', self.M_nc_inv, rhs).reshape(rhs_in.shape)
@@ -155,12 +223,33 @@ class ElasticWaveAderDG2D(BaseADERDG2D):
         rhs = bdry_integrals.reshape(self.nx * self.ny, -1).transpose()
         state_out = lu_solve(self.M_nc_lu, rhs).transpose().copy().reshape(bdry_integrals.shape)
 
+        if not self.y_periodic:
+
+            rhs_in_top = bdry_integrals[:, -1]
+            rhs_top = rhs_in_top.reshape(self.nx, -1).transpose()
+            state_out[:, -1] = lu_solve(self.M_nc_top_lu, rhs_top).transpose().copy().reshape(rhs_in_top.shape)
+
+            rhs_in_bot = bdry_integrals[:, 0]
+            rhs_bot = rhs_in_bot.reshape(self.nx, -1).transpose()
+            state_out[:, 0] = lu_solve(self.M_nc_bot_lu, rhs_bot).transpose().copy().reshape(rhs_in_bot.shape)
+
+
         return state_out
 
     def preconditioner(self, rhs_in):
 
         rhs = rhs_in.reshape(self.nx * self.ny, -1).transpose()
         state_out = lu_solve(self.M1_lu, rhs).transpose().copy().reshape(rhs_in.shape)
+
+        if not self.y_periodic:
+
+            rhs_in_top = rhs_in[:, -1]
+            rhs_top = rhs_in_top.reshape(self.nx, -1).transpose()
+            state_out[:, -1] = lu_solve(self.M1_top_lu, rhs_top).transpose().copy().reshape(rhs_in_top.shape)
+
+            rhs_in_bot = rhs_in[:, 0]
+            rhs_bot = rhs_in_bot.reshape(self.nx, -1).transpose()
+            state_out[:, 0] = lu_solve(self.M1_bot_lu, rhs_bot).transpose().copy().reshape(rhs_in_bot.shape)
 
         return state_out
 

@@ -8,10 +8,7 @@ class ElasticWaveStandardAderDG2D(BaseADERDG2D):
 
     nvars = 5
 
-    def __init__(self, xlim, nx, poly_order, rho, L, mu, dt):
-
-        ylim = xlim
-        ny = nx
+    def __init__(self, xlim, ylim, nx, ny, poly_order, rho, L, mu, dt, y_periodic=True):
 
         BaseADERDG2D.__init__(self, xlim, ylim, nx, ny, poly_order)
 
@@ -20,13 +17,13 @@ class ElasticWaveStandardAderDG2D(BaseADERDG2D):
         self.rho = rho
         self.cp = np.sqrt((2 * self.mu + self.L) / self.rho)
         self.cs = np.sqrt(mu / self.rho)
+        self.y_periodic = y_periodic
 
         self.C_mat = np.array([
             self.L + 2 * self.mu, self.L, 0.0,
              self.L, self.L + 2 * self.mu, 0.0,
              0.0, 0.0, self.mu
             ]).reshape((3, 3))
-        print(self.C_mat.shape)
         self.S_mat = np.linalg.inv(self.C_mat)
 
         self.dt = dt
@@ -82,15 +79,55 @@ class ElasticWaveStandardAderDG2D(BaseADERDG2D):
         self.M1[oxy_slice, u_slice] += -mu * self.y_cfl * Dy
         self.M1[oxy_slice, v_slice] += -mu * self.x_cfl * Dx
 
+        if not self.y_periodic:
+            self.M1_top = self.M1.copy()
+            # self.M1_top[oyy_slice, oyy_slice] += self.y_cfl * self.cp * yp_integral
+            # self.M1_top[oxy_slice, oxy_slice] += self.y_cfl * self.cs * yp_integral
+            # self.M1_top[oxx_slice, oyy_slice] += self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * yp_integral
+
+            self.M1_top[u_slice, oxy_slice] += self.y_cfl * yp_integral / self.rho
+            self.M1_top[v_slice, oyy_slice] += self.y_cfl * yp_integral / self.rho
+
+            self.M1_bot = self.M1.copy()
+            # self.M1_bot[oyy_slice, oyy_slice] += self.y_cfl * self.cp * ym_integral
+            # self.M1_bot[oxy_slice, oxy_slice] += self.y_cfl * self.cs * ym_integral
+            # self.M1_bot[oxx_slice, oyy_slice] += self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * ym_integral
+
+            self.M1_bot[u_slice, oxy_slice] += -self.y_cfl * ym_integral / self.rho
+            self.M1_bot[v_slice, oyy_slice] += -self.y_cfl * ym_integral / self.rho
+
+            self.M1_top_lu = lu_factor(self.M1_top)
+            self.M1_bot_lu = lu_factor(self.M1_bot)
+
+
         self.M1_lu = lu_factor(self.M1)
 
-    def time_step(self):
+
+    def time_step(self, forcing_func=None):
 
         rhs_in = self.get_rhs(self.state)
+
+        if forcing_func is not None:
+            ts = self.ts + self.time
+            F = forcing_func(self.xs, self.ys, ts) * self.dt * 0.5
+            rhs_in += F
+
         rhs = rhs_in.reshape(self.nx * self.ny, -1).transpose()
         state_pred = lu_solve(self.M1_lu, rhs).transpose().copy().reshape(rhs_in.shape)
 
+        if not self.y_periodic:
+
+            rhs_in_top = rhs_in[:, -1]
+            rhs_top = rhs_in_top.reshape(self.nx, -1).transpose()
+            state_pred[:, -1] = lu_solve(self.M1_top_lu, rhs_top).transpose().copy().reshape(rhs_in_top.shape)
+
+            rhs_in_bot = rhs_in[:, 0]
+            rhs_bot = rhs_in_bot.reshape(self.nx, -1).transpose()
+            state_pred[:, 0] = lu_solve(self.M1_bot_lu, rhs_bot).transpose().copy().reshape(rhs_in_bot.shape)
+
         bdry_integrals = self.corrector(state_pred)
+        if forcing_func is not None:
+            bdry_integrals += F
         diff = (bdry_integrals * self.weights_x[None, None, None, :, None, None]).sum(axis=3)
 
         self.state[:] += diff
@@ -153,7 +190,6 @@ class ElasticWaveStandardAderDG2D(BaseADERDG2D):
         oxy_bdry[ip] += self.x_cfl * (num_flux - fluxp) / self.weights_x[-1]
         oxy_bdry[im] -= self.x_cfl * (num_flux - fluxm) / self.weights_x[-1]
 
-
     def _ybdry_corrector(self, bdry_integrals, arr, ip, im):
 
         u_bdry, v_bdry, oxx_bdry, oyy_bdry, oxy_bdry = self.get_vars(bdry_integrals)
@@ -198,6 +234,32 @@ class ElasticWaveStandardAderDG2D(BaseADERDG2D):
         oxy_bdry[ip] += self.y_cfl * (num_flux - fluxp) / self.weights_x[-1]
         oxy_bdry[im] -= self.y_cfl * (num_flux - fluxm) / self.weights_x[-1]
 
+    def _free_ybdry_corrector(self, bdry_integrals, arr, ip, im):
+        u_bdry, v_bdry, oxx_bdry, oyy_bdry, oxy_bdry = self.get_vars(bdry_integrals)
+        u, v, oxx, oyy, oxy = self.get_vars(arr)
+
+        # y boundaries
+        # s characteristics
+        fluxp = -(1 / self.rho) * oyy[ip]
+        fluxm = -(1 / self.rho) * oyy[im]
+        v_bdry[ip] += self.y_cfl * (0.0 - fluxp) / self.weights_x[-1]
+        v_bdry[im] -= self.y_cfl * (0.0 - fluxm) / self.weights_x[-1]
+
+        # oyy_bdry[ip] -= self.y_cfl * self.cp * oyy[ip] / self.weights_x[-1]
+        # oyy_bdry[im] -= self.y_cfl * self.cp * oyy[im] / self.weights_x[-1]
+        #
+        # oxx_bdry[ip] -= self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * oyy[ip] / self.weights_x[-1]
+        # oxx_bdry[im] -= self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * oyy[im] / self.weights_x[-1]
+
+        # p characteristics
+        fluxp = -(1 / self.rho) * oxy[ip]
+        fluxm = -(1 / self.rho) * oxy[im]
+        u_bdry[ip] += self.y_cfl * (0.0 - fluxp) / self.weights_x[-1]
+        u_bdry[im] -= self.y_cfl * (0.0 - fluxm) / self.weights_x[-1]
+
+        # oxy_bdry[ip] -= self.y_cfl * self.cs * oxy[ip] / self.weights_x[-1]
+        # oxy_bdry[im] -= self.y_cfl * self.cs * oxy[im] / self.weights_x[-1]
+
     def corrector(self, state_pred):
         n = self.poly_order + 1
         bdry_integrals = np.zeros((self.nx, self.ny, self.nvars, n, n, n))
@@ -206,7 +268,11 @@ class ElasticWaveStandardAderDG2D(BaseADERDG2D):
         self._xbdry_corrector(bdry_integrals, state_pred, self.xp_ext, self.xm_ext)
 
         self._ybdry_corrector(bdry_integrals, state_pred, self.yp_int, self.ym_int)
-        self._ybdry_corrector(bdry_integrals, state_pred, self.yp_ext, self.ym_ext)
+
+        if self.y_periodic:
+            self._ybdry_corrector(bdry_integrals, state_pred, self.yp_ext, self.ym_ext)
+        else:
+            self._free_ybdry_corrector(bdry_integrals, state_pred, self.yp_ext, self.ym_ext)
 
         # volume terms
         u_bdry, v_bdry, oxx_bdry, oyy_bdry, oxy_bdry = self.get_vars(bdry_integrals)
