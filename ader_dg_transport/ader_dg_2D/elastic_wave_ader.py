@@ -99,17 +99,17 @@ class ElasticWaveAderDG2D(BaseADERDG2D):
         if not self.y_periodic:
             # M1 top and bottom
             self.M1_top = self.M1.copy()
-            # self.M1_top[oyy_slice, oyy_slice] += self.y_cfl * self.cp * yp_integral
-            # self.M1_top[oxy_slice, oxy_slice] += self.y_cfl * self.cs * yp_integral
-            # self.M1_top[oxx_slice, oyy_slice] += self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * yp_integral
+            self.M1_top[oyy_slice, oyy_slice] += self.y_cfl * self.cp * yp_integral
+            self.M1_top[oxy_slice, oxy_slice] += self.y_cfl * self.cs * yp_integral
+            self.M1_top[oxx_slice, oyy_slice] += self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * yp_integral
 
             self.M1_top[u_slice, oxy_slice] += self.y_cfl * yp_integral / self.rho
             self.M1_top[v_slice, oyy_slice] += self.y_cfl * yp_integral / self.rho
 
             self.M1_bot = self.M1.copy()
-            # self.M1_bot[oyy_slice, oyy_slice] += self.y_cfl * self.cp * ym_integral
-            # self.M1_bot[oxy_slice, oxy_slice] += self.y_cfl * self.cs * ym_integral
-            # self.M1_bot[oxx_slice, oyy_slice] += self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * ym_integral
+            self.M1_bot[oyy_slice, oyy_slice] += self.y_cfl * self.cp * ym_integral
+            self.M1_bot[oxy_slice, oxy_slice] += self.y_cfl * self.cs * ym_integral
+            self.M1_bot[oxx_slice, oyy_slice] += self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * ym_integral
 
             self.M1_bot[u_slice, oxy_slice] += -self.y_cfl * ym_integral / self.rho
             self.M1_bot[v_slice, oyy_slice] += -self.y_cfl * ym_integral / self.rho
@@ -117,9 +117,9 @@ class ElasticWaveAderDG2D(BaseADERDG2D):
             # M_nc top and bottom
             self.M_nc_top = self.M_nc.copy()
             # boundary
-            # self.M_nc_top[oyy_slice, oyy_slice] += self.y_cfl * self.cp * yp_integral
-            # self.M_nc_top[oxy_slice, oxy_slice] += self.y_cfl * self.cs * yp_integral
-            # self.M_nc_top[oxx_slice, oyy_slice] += self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * yp_integral
+            self.M_nc_top[oyy_slice, oyy_slice] += self.y_cfl * self.cp * yp_integral
+            self.M_nc_top[oxy_slice, oxy_slice] += self.y_cfl * self.cs * yp_integral
+            self.M_nc_top[oxx_slice, oyy_slice] += self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * yp_integral
             self.M_nc_top[u_slice, oxy_slice] += self.y_cfl * yp_integral / self.rho
             self.M_nc_top[v_slice, oyy_slice] += self.y_cfl * yp_integral / self.rho
             # interface
@@ -136,9 +136,9 @@ class ElasticWaveAderDG2D(BaseADERDG2D):
 
             self.M_nc_bot = self.M_nc.copy()
             # boundary
-            # self.M_nc_bot[oyy_slice, oyy_slice] += self.y_cfl * self.cp * ym_integral
-            # self.M_nc_bot[oxy_slice, oxy_slice] += self.y_cfl * self.cs * ym_integral
-            # self.M_nc_bot[oxx_slice, oyy_slice] += self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * ym_integral
+            self.M_nc_bot[oyy_slice, oyy_slice] += self.y_cfl * self.cp * ym_integral
+            self.M_nc_bot[oxy_slice, oxy_slice] += self.y_cfl * self.cs * ym_integral
+            self.M_nc_bot[oxx_slice, oyy_slice] += self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * ym_integral
             self.M_nc_bot[u_slice, oxy_slice] += -self.y_cfl * ym_integral / self.rho
             self.M_nc_bot[v_slice, oyy_slice] += -self.y_cfl * ym_integral / self.rho
             # interface

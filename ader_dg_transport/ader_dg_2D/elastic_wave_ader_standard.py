@@ -81,17 +81,17 @@ class ElasticWaveStandardAderDG2D(BaseADERDG2D):
 
         if not self.y_periodic:
             self.M1_top = self.M1.copy()
-            # self.M1_top[oyy_slice, oyy_slice] += self.y_cfl * self.cp * yp_integral
-            # self.M1_top[oxy_slice, oxy_slice] += self.y_cfl * self.cs * yp_integral
-            # self.M1_top[oxx_slice, oyy_slice] += self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * yp_integral
+            self.M1_top[oyy_slice, oyy_slice] += self.y_cfl * self.cp * yp_integral
+            self.M1_top[oxy_slice, oxy_slice] += self.y_cfl * self.cs * yp_integral
+            self.M1_top[oxx_slice, oyy_slice] += self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * yp_integral
 
             self.M1_top[u_slice, oxy_slice] += self.y_cfl * yp_integral / self.rho
             self.M1_top[v_slice, oyy_slice] += self.y_cfl * yp_integral / self.rho
 
             self.M1_bot = self.M1.copy()
-            # self.M1_bot[oyy_slice, oyy_slice] += self.y_cfl * self.cp * ym_integral
-            # self.M1_bot[oxy_slice, oxy_slice] += self.y_cfl * self.cs * ym_integral
-            # self.M1_bot[oxx_slice, oyy_slice] += self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * ym_integral
+            self.M1_bot[oyy_slice, oyy_slice] += self.y_cfl * self.cp * ym_integral
+            self.M1_bot[oxy_slice, oxy_slice] += self.y_cfl * self.cs * ym_integral
+            self.M1_bot[oxx_slice, oyy_slice] += self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * ym_integral
 
             self.M1_bot[u_slice, oxy_slice] += -self.y_cfl * ym_integral / self.rho
             self.M1_bot[v_slice, oyy_slice] += -self.y_cfl * ym_integral / self.rho
@@ -243,11 +243,11 @@ class ElasticWaveStandardAderDG2D(BaseADERDG2D):
         v_bdry[ip] += self.y_cfl * (0.0 - fluxp) / self.weights_x[-1]
         v_bdry[im] -= self.y_cfl * (0.0 - fluxm) / self.weights_x[-1]
 
-        # oyy_bdry[ip] -= self.y_cfl * self.cp * oyy[ip] / self.weights_x[-1]
-        # oyy_bdry[im] -= self.y_cfl * self.cp * oyy[im] / self.weights_x[-1]
-        #
-        # oxx_bdry[ip] -= self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * oyy[ip] / self.weights_x[-1]
-        # oxx_bdry[im] -= self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * oyy[im] / self.weights_x[-1]
+        oyy_bdry[ip] -= self.y_cfl * self.cp * oyy[ip] / self.weights_x[-1]
+        oyy_bdry[im] -= self.y_cfl * self.cp * oyy[im] / self.weights_x[-1]
+
+        oxx_bdry[ip] -= self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * oyy[ip] / self.weights_x[-1]
+        oxx_bdry[im] -= self.y_cfl * self.L * (self.cp / (self.L + 2 * self.mu)) * oyy[im] / self.weights_x[-1]
 
         # p characteristics
         fluxp = -(1 / self.rho) * oxy[ip]
@@ -255,8 +255,8 @@ class ElasticWaveStandardAderDG2D(BaseADERDG2D):
         u_bdry[ip] += self.y_cfl * (0.0 - fluxp) / self.weights_x[-1]
         u_bdry[im] -= self.y_cfl * (0.0 - fluxm) / self.weights_x[-1]
 
-        # oxy_bdry[ip] -= self.y_cfl * self.cs * oxy[ip] / self.weights_x[-1]
-        # oxy_bdry[im] -= self.y_cfl * self.cs * oxy[im] / self.weights_x[-1]
+        oxy_bdry[ip] -= self.y_cfl * self.cs * oxy[ip] / self.weights_x[-1]
+        oxy_bdry[im] -= self.y_cfl * self.cs * oxy[im] / self.weights_x[-1]
 
     def corrector(self, state_pred):
         n = self.poly_order + 1
