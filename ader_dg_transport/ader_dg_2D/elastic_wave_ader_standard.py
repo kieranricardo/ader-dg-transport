@@ -126,11 +126,9 @@ class ElasticWaveStandardAderDG2D(BaseADERDG2D):
             state_pred[:, 0] = lu_solve(self.M1_bot_lu, rhs_bot).transpose().copy().reshape(rhs_in_bot.shape)
 
         bdry_integrals = self.corrector(state_pred)
-        if forcing_func is not None:
-            bdry_integrals += F
         diff = (bdry_integrals * self.weights_x[None, None, None, :, None, None]).sum(axis=3)
 
-        self.state[:] += diff
+        self.state[:] = state_pred[:, :, :, -1] + diff
         self.time += self.dt
 
         return 0
@@ -271,20 +269,6 @@ class ElasticWaveStandardAderDG2D(BaseADERDG2D):
 
         if self.y_periodic:
             self._ybdry_corrector(bdry_integrals, state_pred, self.yp_ext, self.ym_ext)
-        else:
-            self._free_ybdry_corrector(bdry_integrals, state_pred, self.yp_ext, self.ym_ext)
-
-        # volume terms
-        u_bdry, v_bdry, oxx_bdry, oyy_bdry, oxy_bdry = self.get_vars(bdry_integrals)
-        u, v, oxx, oyy, oxy = self.get_vars(state_pred)
-
-        u_bdry += (self.x_cfl / self.rho) * self.ddxi(oxx) + (self.y_cfl / self.rho) * self.ddeta(oxy)
-        v_bdry += (self.x_cfl / self.rho) * self.ddxi(oxy) + (self.y_cfl / self.rho) * self.ddeta(oyy)
-
-        oxx_bdry += (self.L + 2 * self.mu) * self.x_cfl * self.ddxi(u) + self.L * self.y_cfl * self.ddeta(v)
-        oyy_bdry += self.L * self.x_cfl * self.ddxi(u) + (self.L + 2 * self.mu) * self.y_cfl * self.ddeta(v)
-
-        oxy_bdry += self.mu * self.x_cfl * self.ddxi(v) + self.mu * self.y_cfl * self.ddeta(u)
 
         return bdry_integrals
 
