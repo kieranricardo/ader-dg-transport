@@ -69,7 +69,8 @@ class WaveStandardAderDG2D(BaseADERDG2D):
         bdry_integrals = self.corrector(state_pred)
         diff = (bdry_integrals * self.weights_x[None, None, None, :, None, None]).sum(axis=3)
 
-        self.state[:] += diff
+        # self.state[:] += diff
+        self.state[:] = state_pred[:, :, :, -1] + diff
         self.time += self.dt
 
         return 0
@@ -135,14 +136,6 @@ class WaveStandardAderDG2D(BaseADERDG2D):
 
         self._ybdry_corrector(bdry_integrals, state_pred, self.yp_int, self.ym_int)
         self._ybdry_corrector(bdry_integrals, state_pred, self.yp_ext, self.ym_ext)
-
-        # volume terms
-        u_bdry_integrals, v_bdry_integrals, h_bdry_integrals = self.get_vars(bdry_integrals)
-        u_pred, v_pred, h_pred = self.get_vars(state_pred)
-
-        u_bdry_integrals -= self.x_cfl * self.ddxi(h_pred)
-        v_bdry_integrals -= self.y_cfl * self.ddeta(h_pred)
-        h_bdry_integrals -= self.x_cfl * self.ddxi(u_pred) + self.y_cfl * self.ddeta(v_pred)
 
         return bdry_integrals
 

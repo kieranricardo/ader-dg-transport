@@ -235,6 +235,44 @@ class BaseADERDG2D:
     def ddy(self, arr):
         return self.ddeta(arr) / self.dy
 
+    def ddxi_jumps(self, arr):
+        out = self.ddxi(arr)
+
+        ip = self.xp_int
+        im = self.xm_int
+
+        num_flux = 0.5 * (arr[ip] + arr[im])
+        out[ip] += (num_flux - arr[ip]) / self.weights_x[-1]
+        out[im] -= (num_flux - arr[im]) / self.weights_x[-1]
+
+        ip = self.xp_ext
+        im = self.xm_ext
+
+        num_flux = 0.5 * (arr[ip] + arr[im])
+        out[ip] += (num_flux - arr[ip]) / self.weights_x[-1]
+        out[im] -= (num_flux - arr[im]) / self.weights_x[-1]
+
+        return out
+
+    def ddeta_jumps(self, arr):
+        out = self.ddeta(arr)
+
+        ip = self.yp_int
+        im = self.ym_int
+
+        num_flux = 0.5 * (arr[ip] + arr[im])
+        out[ip] += (num_flux - arr[ip]) / self.weights_x[-1]
+        out[im] -= (num_flux - arr[im]) / self.weights_x[-1]
+
+        ip = self.yp_ext
+        im = self.ym_ext
+
+        num_flux = 0.5 * (arr[ip] + arr[im])
+        out[ip] += (num_flux - arr[ip]) / self.weights_x[-1]
+        out[im] -= (num_flux - arr[im]) / self.weights_x[-1]
+
+        return out
+
     def apply_time_matrix(self, mat, arr):
         return np.einsum('ab,ecbzd->ecazd', mat, arr)
 
