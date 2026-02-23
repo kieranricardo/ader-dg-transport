@@ -72,12 +72,12 @@ class WaveAderDG2DImplicitIter(BaseADERDG2D):
 
         state_pred = np.ones_like(rhs_in) * self.state[..., None, :, :]
 
-
-        state_pred = self._inner_solver(state_pred, rhs_in, boundaries=False, verbose=False, maxiter=inner_maxiter)
+        inner_tol = tol * abs(self.state).max() * 1e-2
+        state_pred = self._inner_solver_cpp(state_pred, rhs_in, boundaries=False, verbose=False, maxiter=inner_maxiter, tol=inner_tol)
 
         for i in range(maxiter):
 
-            state_pred_new = self._inner_solver(state_pred, rhs_in, boundaries=True, verbose=False, maxiter=inner_maxiter)
+            state_pred_new = self._inner_solver_cpp(state_pred, rhs_in, boundaries=True, verbose=False, maxiter=inner_maxiter, tol=inner_tol)
 
             diff = state_pred_new - state_pred
             rel_diff = np.sqrt(self.norm(*self.get_vars(diff))) / np.sqrt(self.norm(*self.get_vars(state_pred_new)))
@@ -107,9 +107,12 @@ class WaveAderDG2DImplicitIter(BaseADERDG2D):
     def _inner_solver(self, state_pred, rhs_in, boundaries, maxiter=10, tol=1e-6, verbose=False):
         state_pred_new = np.copy(state_pred)
 
+        if boundaries:
+            rhs_in = np.copy(rhs_in) - self.wave_forward(0 * state_pred, state_pred)
+
         for i in range(maxiter):
             if boundaries:
-                bdry_integrals = rhs_in - self.wave_forward(state_pred_new, state_pred)
+                bdry_integrals = rhs_in - self.wave_forward(state_pred_new, 0 * state_pred)
             else:
                 bdry_integrals = rhs_in - self.wave_forward_volume(state_pred_new)
 
@@ -125,6 +128,31 @@ class WaveAderDG2DImplicitIter(BaseADERDG2D):
             u[:] = self.apply_invK(u_bdry_integrals)
             v[:] = self.apply_invK(v_bdry_integrals)
             h[:] = self.apply_invK(h_bdry_integrals)
+
+        return state_pred_new
+
+    def _inner_solver_cpp(self, state_pred, rhs_in, boundaries, maxiter=10, tol=1e-6, verbose=False):
+        from ader_dg_transport import dg_volume_kernel, dg_kernel
+
+        state_pred_new = np.copy(state_pred)
+
+        if boundaries:
+            rhs_in = np.copy(rhs_in) - self.wave_forward(0 * state_pred, state_pred)
+
+        u, v, h = self.get_vars(state_pred)
+        u_new, v_new, h_new = np.copy(u), np.copy(v), np.copy(h)
+
+        u_rhs_in, v_rhs_in, h_rhs_in = self.get_vars(rhs_in)
+
+        if boundaries:
+            _ = dg_kernel(u_new, v_new, h_new, u_rhs_in, v_rhs_in, h_rhs_in, self.c, self.D, self.invK, self.x_cfl, self.y_cfl, self.weights_x[-1], maxiter, tol=tol)
+        else:
+            _ = dg_volume_kernel(u_new, v_new, h_new, u_rhs_in, v_rhs_in, h_rhs_in, self.c, self.D, self.invK, self.x_cfl, self.y_cfl, self.weights_x[-1], maxiter, tol=tol)
+
+        u, v, h = self.get_vars(state_pred_new)
+        u[:] = u_new
+        v[:] = v_new
+        h[:] = h_new
 
         return state_pred_new
 

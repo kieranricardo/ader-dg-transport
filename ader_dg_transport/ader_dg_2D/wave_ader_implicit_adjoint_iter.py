@@ -11,6 +11,31 @@ class WaveAderDG2DImplicitAdjointIter(WaveAderDG2DImplicitIter):
 
         WaveAderDG2DImplicitIter.__init__(self, xlim, ylim, nx, ny, poly_order, c, dt, f=f, a=a)
 
+    def _inner_solver_cpp(self, state_pred, rhs_in, boundaries, maxiter=10, tol=1e-6, verbose=False):
+        from ader_dg_transport import dg_volume_kernel_adjoint, dg_kernel_adjoint
+
+        state_pred_new = np.copy(state_pred)
+
+        if boundaries:
+            rhs_in = np.copy(rhs_in) - self.wave_forward(0 * state_pred, state_pred)
+
+        u, v, h = self.get_vars(state_pred)
+        u_new, v_new, h_new = np.copy(u), np.copy(v), np.copy(h)
+
+        u_rhs_in, v_rhs_in, h_rhs_in = self.get_vars(rhs_in)
+
+        if boundaries:
+            _ = dg_kernel_adjoint(u_new, v_new, h_new, u_rhs_in, v_rhs_in, h_rhs_in, self.c, self.D, self.invK, self.x_cfl, self.y_cfl, self.weights_x[-1], maxiter, tol=tol)
+        else:
+            _ = dg_volume_kernel_adjoint(u_new, v_new, h_new, u_rhs_in, v_rhs_in, h_rhs_in, self.c, self.D, self.invK, self.x_cfl, self.y_cfl, self.weights_x[-1], maxiter, tol=tol)
+
+        u, v, h = self.get_vars(state_pred_new)
+        u[:] = u_new
+        v[:] = v_new
+        h[:] = h_new
+
+        return state_pred_new
+
     def _bdry_corrector(self, bdry_integrals, arr1, arr2, ip, im, mode):
 
         # use arr1 for same element
