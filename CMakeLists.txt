@@ -21,20 +21,21 @@ pybind11_add_module(_core
 target_include_directories(_core PRIVATE ${NUMPY_INCLUDE})
 
 # A couple of safe performance flags (don’t go too wild here)
-if (MSVC)
-  target_compile_options(_core PRIVATE /O2)
+if (APPLE)
+  target_compile_options(
+      _core PRIVATE
+      -Ofast -mcpu=native
+      -Xpreprocessor -fopenmp
+      -I/opt/homebrew/Cellar/libomp/21.1.8/include
+    )
+  target_link_libraries(_core PRIVATE /opt/homebrew/Cellar/libomp/21.1.8/lib/libomp.dylib)
 else()
   target_compile_options(
   _core PRIVATE
   -Ofast -mcpu=native
-  -Rpass=loop-vectorize
-  -Rpass-missed=loop-vectorize
-  -Rpass=loop-unroll
-  -Rpass-missed=loop-unroll
-  -Rpass-analysis=loop-unroll
+  -fopenmp
 )
 endif()
-
 install(TARGETS _core
         LIBRARY DESTINATION ader_dg_transport
         ARCHIVE DESTINATION ader_dg_transport
