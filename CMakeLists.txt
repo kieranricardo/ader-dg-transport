@@ -24,7 +24,15 @@ target_include_directories(_core PRIVATE ${NUMPY_INCLUDE})
 if (MSVC)
   target_compile_options(_core PRIVATE /O2)
 else()
-  target_compile_options(_core PRIVATE -O3)
+  target_compile_options(
+  _core PRIVATE
+  -Ofast -mcpu=native
+  -Rpass=loop-vectorize
+  -Rpass-missed=loop-vectorize
+  -Rpass=loop-unroll
+  -Rpass-missed=loop-unroll
+  -Rpass-analysis=loop-unroll
+)
 endif()
 
 install(TARGETS _core
