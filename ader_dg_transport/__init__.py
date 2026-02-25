@@ -1,3 +1,3 @@
-from ._core import dg_kernel, dg_kernel_adjoint
+from ._core import ader_dg_wave_2D_kernel, ader_dg_wave_2D_kernel_adjoint
 
-__all__ = ["dg_kernel", "dg_kernel_adjoint"]
+__all__ = ["ader_dg_wave_2D_kernel", "ader_dg_wave_2D_kernel_adjoint"]

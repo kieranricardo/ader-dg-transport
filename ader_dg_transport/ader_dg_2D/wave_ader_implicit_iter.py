@@ -132,7 +132,7 @@ class WaveAderDG2DImplicitIter(BaseADERDG2D):
         return state_pred_new
 
     def _inner_solver_cpp(self, state_pred, rhs_in, boundaries, maxiter=10, tol=1e-6, verbose=False):
-        from ader_dg_transport import dg_kernel
+        from ader_dg_transport import ader_dg_wave_2D_kernel
 
         state_pred_new = np.copy(state_pred)
 
@@ -145,9 +145,9 @@ class WaveAderDG2DImplicitIter(BaseADERDG2D):
         u_rhs_in, v_rhs_in, h_rhs_in = self.get_vars(rhs_in)
 
         if boundaries:
-            _ = dg_kernel(u_new, v_new, h_new, u_rhs_in, v_rhs_in, h_rhs_in, self.c, self.D, self.invK, self.x_cfl, self.y_cfl, self.weights_x[-1], maxiter, tol=tol, bdry_flag=1.0)
+            _ = ader_dg_wave_2D_kernel(u_new, v_new, h_new, u_rhs_in, v_rhs_in, h_rhs_in, self.c, self.D, self.invK, self.x_cfl, self.y_cfl, self.weights_x[-1], maxiter, tol=tol, bdry_flag=1.0)
         else:
-            _ = dg_kernel(u_new, v_new, h_new, u_rhs_in, v_rhs_in, h_rhs_in, self.c, self.D, self.invK, self.x_cfl, self.y_cfl, self.weights_x[-1], maxiter, tol=tol, bdry_flag=0.0)
+            _ = ader_dg_wave_2D_kernel(u_new, v_new, h_new, u_rhs_in, v_rhs_in, h_rhs_in, self.c, self.D, self.invK, self.x_cfl, self.y_cfl, self.weights_x[-1], maxiter, tol=tol, bdry_flag=0.0)
 
         u, v, h = self.get_vars(state_pred_new)
         u[:] = u_new
