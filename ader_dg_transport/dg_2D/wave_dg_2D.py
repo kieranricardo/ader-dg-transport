@@ -37,7 +37,7 @@ class WaveDG2D(BaseDG2D):
     def norm(self, u, v, h):
         return np.sqrt(self.integrate(u ** 2 + v ** 2 + h ** 2))
 
-    def time_step(self, dt=None):
+    def time_step(self, dt=None, forcing=None, history_data=None, stage_data=None):
 
         if dt is None:
             dt = self.dt
@@ -46,15 +46,43 @@ class WaveDG2D(BaseDG2D):
         u_tmp = np.zeros_like(self.state)
 
         self.solve(self.state, dstatedt=k)
+        i = 0
+        if history_data is not None:
+            history_data[i][:] = k / self.c
+        if forcing is not None:
+            k += forcing[i]
+        if stage_data is not None:
+            stage_data[i][:] = self.state
 
         u_tmp[:] = self.state + 0.5 * dt * k
         self.solve(u_tmp, dstatedt=k)
+        i = 1
+        if history_data is not None:
+            history_data[i][:] = k / self.c
+        if forcing is not None:
+            k += forcing[i]
+        if stage_data is not None:
+            stage_data[i][:] = u_tmp
 
         u_tmp[:] = u_tmp[:] + 0.5 * dt * k
         self.solve(u_tmp, dstatedt=k)
+        i = 2
+        if history_data is not None:
+            history_data[i][:] = k / self.c
+        if forcing is not None:
+            k += forcing[i]
+        if stage_data is not None:
+            stage_data[i][:] = u_tmp
 
         u_tmp[:] = (2 / 3) * self.state + (1 / 3) * u_tmp[:] + (1 / 6) * dt * k
         self.solve(u_tmp, dstatedt=k)
+        i = 3
+        if history_data is not None:
+            history_data[i][:] = k / self.c
+        if forcing is not None:
+            k += forcing[i]
+        if stage_data is not None:
+            stage_data[i][:] = u_tmp
 
         self.state[:] = u_tmp + 0.5 * dt * k
 
