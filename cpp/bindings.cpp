@@ -282,10 +282,8 @@ void  dg_wave_2D_bdry_kernel_py(
     const std::size_t n  = up.shape(1);
 
     // DG bdry contraction
-    #pragma omp parallel
     {
 
-        #pragma omp for collapse(1)
         for (std::size_t i = 0; i < nx; ++i) {
 
             if (n == 3) {
@@ -429,10 +427,8 @@ void  dg_wave_adjoint_2D_bdry_kernel_py(
     const std::size_t n  = up.shape(1);
 
     // DG bdry contraction
-    #pragma omp parallel
     {
 
-        #pragma omp for collapse(1)
         for (std::size_t i = 0; i < nx; ++i) {
 
             if (n == 3) {

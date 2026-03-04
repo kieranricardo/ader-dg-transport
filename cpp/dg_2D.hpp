@@ -1,5 +1,6 @@
 #pragma once
 #include <stdexcept>
+#include "dg_matrices_2D.hpp"
 
 
 template<int N>
@@ -31,7 +32,7 @@ inline void dg_wave_2D_volume_kernel_element(
     double* __restrict__ dVdtptr,
     double* __restrict__ dHdtptr,
     const double* __restrict__ Cptr,
-    const double* __restrict__ Dptr,
+    const double* __restrict__ Dptr_old,
     const double Jx,
     const double Jy,
     const double w
@@ -45,6 +46,8 @@ inline void dg_wave_2D_volume_kernel_element(
     ElementView2DMut<N> dhdt{dHdtptr};
     ElementView2D<N> c{Cptr};
 
+    constexpr auto& Dptr = DGConstants<N>::D;
+
     for (std::size_t a = 0; a < N; ++a) {
         for (std::size_t b = 0; b < N; ++b) {
                 double dhdx = 0.0;
@@ -54,6 +57,8 @@ inline void dg_wave_2D_volume_kernel_element(
                 #pragma unroll
                 for (std::size_t k = 0; k < N; ++k) {
 
+//                    dhdx += Dptr[a][k] * h(k, b);
+//                    dudx += Dptr[a][k] * u(k, b);
                     dhdx += Dptr[a * N + k] * h(k, b);
                     dudx += Dptr[a * N + k] * u(k, b);
                 }
@@ -73,6 +78,8 @@ inline void dg_wave_2D_volume_kernel_element(
                 #pragma unroll
                 for (std::size_t k = 0; k < N; ++k) {
 
+//                    dhdy += Dptr[b][k] * h(a, k);
+//                    dvdy += Dptr[b][k] * v(a, k);
                     dhdy += Dptr[b * N + k] * h(a, k);
                     dvdy += Dptr[b * N + k] * v(a, k);
                 }
@@ -95,7 +102,7 @@ inline void dg_wave_adjoint_2D_volume_kernel_element(
     double* __restrict__ dVdtptr,
     double* __restrict__ dHdtptr,
     const double* __restrict__ Cptr,
-    const double* __restrict__ Dptr,
+    const double* __restrict__ Dptr_old,
     const double Jx,
     const double Jy,
     const double w
@@ -109,6 +116,8 @@ inline void dg_wave_adjoint_2D_volume_kernel_element(
     ElementView2DMut<N> dhdt{dHdtptr};
     ElementView2D<N> c{Cptr};
 
+    constexpr auto& Dptr = DGConstants<N>::D;
+
     for (std::size_t a = 0; a < N; ++a) {
         for (std::size_t b = 0; b < N; ++b) {
                 double dhdx = 0.0;
@@ -120,6 +129,8 @@ inline void dg_wave_adjoint_2D_volume_kernel_element(
 
                     dhdx += Dptr[a * N + k] * h(k, b) * c(k, b);
                     dudx += Dptr[a * N + k] * u(k, b) * c(k, b);
+//                    dhdx += Dptr[a][k] * h(k, b) * c(k, b);
+//                    dudx += Dptr[a][k] * u(k, b) * c(k, b);
                 }
 
                 dudt(a, b) += dhdx / Jx;
@@ -139,6 +150,8 @@ inline void dg_wave_adjoint_2D_volume_kernel_element(
 
                     dhdy += Dptr[b * N + k] * h(a, k) * c(a, k);
                     dvdy += Dptr[b * N + k] * v(a, k) * c(a, k);
+//                    dhdy += Dptr[b][k] * h(a, k) * c(a, k);
+//                    dvdy += Dptr[b][k] * v(a, k) * c(a, k);
                 }
 
                 dvdt(a, b) += dhdy / Jx;
