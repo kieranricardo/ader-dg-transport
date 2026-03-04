@@ -32,6 +32,8 @@ inline void dg_wave_2D_volume_kernel_element(
     double* __restrict__ dVdtptr,
     double* __restrict__ dHdtptr,
     const double* __restrict__ Cptr,
+    double* __restrict__ u_bufptr,
+    double* __restrict__ h_bufptr,
     const double Jx,
     const double Jy,
     const double w
@@ -44,8 +46,17 @@ inline void dg_wave_2D_volume_kernel_element(
     ElementView2DMut<N> dvdt{dVdtptr};
     ElementView2DMut<N> dhdt{dHdtptr};
     ElementView2D<N> c{Cptr};
+    ElementView2DMut<N> u_buf{u_bufptr};
+    ElementView2DMut<N> h_buf{h_bufptr};
 
     constexpr auto& D = DGConstants<N>::D;
+
+    for (std::size_t a = 0; a < N; ++a) {
+        for (std::size_t b = 0; b < N; ++b) {
+            u_buf(a, b) = u(b, a);
+            h_buf(a, b) = h(b, a);
+        }
+    }
 
     for (std::size_t a = 0; a < N; ++a) {
         for (std::size_t b = 0; b < N; ++b) {
@@ -56,8 +67,8 @@ inline void dg_wave_2D_volume_kernel_element(
                 #pragma unroll
                 for (std::size_t k = 0; k < N; ++k) {
 
-                    dhdx += D[a][k] * h(k, b);
-                    dudx += D[a][k] * u(k, b);
+                    dhdx += D[a][k] * h_buf(b, k);
+                    dudx += D[a][k] * u_buf(b, k);
 
                 }
 
@@ -99,6 +110,8 @@ inline void dg_wave_adjoint_2D_volume_kernel_element(
     double* __restrict__ dVdtptr,
     double* __restrict__ dHdtptr,
     const double* __restrict__ Cptr,
+    double* __restrict__ u_bufptr,
+    double* __restrict__ h_bufptr,
     const double Jx,
     const double Jy,
     const double w
@@ -111,8 +124,17 @@ inline void dg_wave_adjoint_2D_volume_kernel_element(
     ElementView2DMut<N> dvdt{dVdtptr};
     ElementView2DMut<N> dhdt{dHdtptr};
     ElementView2D<N> c{Cptr};
+    ElementView2DMut<N> cu_buf{u_bufptr};
+    ElementView2DMut<N> ch_buf{h_bufptr};
 
     constexpr auto& D = DGConstants<N>::D;
+
+    for (std::size_t a = 0; a < N; ++a) {
+        for (std::size_t b = 0; b < N; ++b) {
+            cu_buf(a, b) = c(b, a) * u(b, a);
+            ch_buf(a, b) = c(b, a) * h(b, a);
+        }
+    }
 
     for (std::size_t a = 0; a < N; ++a) {
         for (std::size_t b = 0; b < N; ++b) {
@@ -123,8 +145,8 @@ inline void dg_wave_adjoint_2D_volume_kernel_element(
                 #pragma unroll
                 for (std::size_t k = 0; k < N; ++k) {
 
-                    dhdx += D[a][k] * h(k, b) * c(k, b);
-                    dudx += D[a][k] * u(k, b) * c(k, b);
+                    dhdx += D[a][k] * ch_buf(b, k);
+                    dudx += D[a][k] * cu_buf(b, k);
                 }
 
                 dudt(a, b) += dhdx / Jx;
