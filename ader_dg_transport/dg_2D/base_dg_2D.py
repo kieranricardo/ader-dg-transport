@@ -150,3 +150,87 @@ class BaseDG2D:
             x, y, data.ravel(),
             cmap="nipy_spectral", vmin=vmin, vmax=vmax, levels=100
         )
+
+
+def to_multigrid_points_2D(order):
+    x_in, weights = gll(order, iterative=True)
+    y_in, _ = gll(order, iterative=True)
+
+    weights_2D = weights[None, :] * weights[:, None]
+
+    x_out_1 = (x_in - 1) * 0.5
+    x_out_2 = (x_in + 1) * 0.5
+    y_out_1 = (y_in - 1) * 0.5
+    y_out_2 = (y_in + 1) * 0.5
+
+    interp_mats = [np.zeros((order + 1, order + 1, order + 1, order + 1)) for _ in range(4)]
+
+    # interp_mat[i, j, k, l] = kl basis at ij point
+
+    for i in range(len(y_out_1)):
+        for j in range(len(x_out_1)):
+            for k in range(len(y_in)):
+                for l in range(len(x_in)):
+                    y_data = np.zeros_like(y_in)
+                    y_data[k] = 1.0
+                    y_poly = lagrange(y_in, y_data)
+
+                    x_data = np.zeros_like(x_in)
+                    x_data[l] = 1.0
+                    x_poly = lagrange(x_in, x_data)
+
+                    interp_mats[0][i, j, k, l] = y_poly(y_out_1[i]) * x_poly(x_out_1[j])
+                    interp_mats[1][i, j, k, l] = y_poly(y_out_1[i]) * x_poly(x_out_2[j])
+
+                    interp_mats[2][i, j, k, l] = y_poly(y_out_2[i]) * x_poly(x_out_1[j])
+                    interp_mats[3][i, j, k, l] = y_poly(y_out_2[i]) * x_poly(x_out_2[j])
+
+    n = order + 1
+    square_shape = (n ** 2, n ** 2)
+    native_shape = (n,) * 4
+    coarsen_mats = [mat.reshape(square_shape).transpose().reshape(native_shape) for mat in interp_mats]
+
+    mm = np.zeros(((n ** 2, n ** 2)))
+    for i in range(4):
+        mat = coarsen_mats[i].reshape((n ** 2, n ** 2))
+        mm += 0.25 * mat @ np.diag(weights_2D.ravel()) @ mat.transpose()
+
+    coarsen_inv_mm = np.linalg.inv(mm).reshape((n, n, n, n))
+    return interp_mats, coarsen_mats, coarsen_inv_mm, weights_2D
+
+
+def refine(arr_in, interp_mats):
+    order = arr_in.shape[2] - 1
+    n = order + 1
+    cellsx, cellsz = arr_in.shape[:2]
+    out_shape = (2 * cellsx, 2 * cellsz, n, n)
+    arr_out = np.zeros(out_shape)
+
+    arr_out[::2, ::2] = np.einsum('abcd,kjcd->kjab', interp_mats[0], arr_in)
+    arr_out[::2, 1::2] = np.einsum('abcd,kjcd->kjab', interp_mats[1], arr_in)
+    arr_out[1::2, ::2] = np.einsum('abcd,kjcd->kjab', interp_mats[2], arr_in)
+    arr_out[1::2, 1::2] = np.einsum('abcd,kjcd->kjab', interp_mats[3], arr_in)
+
+    return arr_out
+
+
+def coarsen(arr_fine, coarsen_mats, coarsen_inv_mm, coarsen_weights):
+    if len(arr_fine.shape) == 5:
+        ein_string = 'abcd,zefcd->zefab'
+        weights = coarsen_weights[None, None, None]
+    elif len(arr_fine.shape) == 4:
+        ein_string = 'abcd,efcd->efab'
+        weights = coarsen_weights[None, None]
+    else:
+        raise ValueError(f"arr_coarse: shape mismatch with shape {arr_fine.shape}.")
+
+    arr_w = 0.25 * arr_fine * weights  # multiply by weights and quarter (rescale jacobians)
+
+    arr_coarse = np.einsum(ein_string, coarsen_mats[0], arr_w[::2, ::2])
+    arr_coarse += np.einsum(ein_string, coarsen_mats[1], arr_w[::2, 1::2])
+    arr_coarse += np.einsum(ein_string, coarsen_mats[2], arr_w[1::2, ::2])
+    arr_coarse += np.einsum(ein_string, coarsen_mats[3], arr_w[1::2, 1::2])
+
+    arr_coarse = np.einsum(ein_string, coarsen_inv_mm, arr_coarse)
+
+    return arr_coarse

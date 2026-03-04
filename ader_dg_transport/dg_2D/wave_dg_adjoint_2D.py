@@ -24,9 +24,7 @@ class WaveAdjointDG2D(WaveDG2D):
             dvdt += self.ddeta(self.c * h) / self.Jy
             dhdt += (self.ddxi(self.c * u) / self.Jx + self.ddeta(self.c * v) / self.Jy)
 
-        bdry_list = ((self.xp_int, self.xm_int, 'x'), (self.xp_ext, self.xm_ext, 'x'), (self.yp_int, self.ym_int, 'y'), (self.yp_ext, self.ym_ext, 'y'))
-
-        for (ip, im, direction) in bdry_list:
+        def _interface_boundaries(ip, im, direction):
 
             state_p, dstatedt_p = self.get_boundary_data(state, ip), self.get_boundary_data(dstatedt, ip)
             state_m, dstatedt_m = self.get_boundary_data(state, im), self.get_boundary_data(dstatedt, im)
@@ -35,6 +33,46 @@ class WaveAdjointDG2D(WaveDG2D):
             self.solve_boundaries(state_p, state_m, dstatedt_p, dstatedt_m, cp, cm, direction)
             dstatedt[(slice(None),) + ip] = dstatedt_p
             dstatedt[(slice(None),) + im] = dstatedt_m
+
+        _interface_boundaries(self.xp_int, self.xm_int, 'x')
+        _interface_boundaries(self.yp_int, self.ym_int, 'y')
+
+        def _free_boundaries(ip, im, direction):
+
+            state_p, dstatedt_p = self.get_boundary_data(state, ip), self.get_boundary_data(dstatedt, ip)
+            dstatedt_alt = np.zeros_like(dstatedt_p)
+            state_m = np.copy(state_p)
+            um, vm, hm = self.get_vars(state_m)
+            hm *= -1
+            # if direction == 'y':
+            #     vm *= -1
+            # else:
+            #     um *= -1
+            c_ = np.copy(self.c[ip])
+            self.solve_boundaries(state_p, state_m, dstatedt_p, dstatedt_alt, c_, c_, direction)
+            dstatedt[(slice(None),) + ip] = dstatedt_p
+
+            state_m, dstatedt_m = self.get_boundary_data(state, im), self.get_boundary_data(dstatedt, im)
+            state_p = np.copy(state_m)
+            up, vp, hp = self.get_vars(state_p)
+            # if direction == 'y':
+            #     vp *= -1
+            # else:
+            #     up *= -1
+            hp *= -1
+            c_ = np.copy(self.c[im])
+            self.solve_boundaries(state_p, state_m, dstatedt_alt, dstatedt_m, c_, c_, direction)
+            dstatedt[(slice(None),) + im] = dstatedt_m
+
+        if self.x_periodic:
+            _interface_boundaries(self.xp_ext, self.xm_ext, 'x')
+        else:
+            _free_boundaries(self.xp_ext, self.xm_ext, 'x')
+
+        if self.y_periodic:
+            _interface_boundaries(self.yp_ext, self.ym_ext, 'y')
+        else:
+            _free_boundaries(self.yp_ext, self.ym_ext, 'y')
 
     def solve_boundaries(self, state_p, state_m, dstatedt_p, dstatedt_m, cp, cm, direction):
 
