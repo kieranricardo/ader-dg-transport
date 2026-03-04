@@ -221,25 +221,25 @@ void  dg_wave_2D_volume_kernel_py(
                     dg_wave_2D_volume_kernel_element<3>(
                         &U(i, j, 0, 0), &V(i, j, 0, 0), &H(i, j, 0, 0),
                         &dUdt(i, j, 0, 0), &dVdt(i, j, 0, 0), &dHdt(i, j, 0, 0),
-                        &C(i, j, 0, 0), &Dmat(0, 0), Jx, Jy, w
+                        &C(i, j, 0, 0), Jx, Jy, w
                     );
                 } else if (n == 4) {
                     dg_wave_2D_volume_kernel_element<4>(
                         &U(i, j, 0, 0), &V(i, j, 0, 0), &H(i, j, 0, 0),
                         &dUdt(i, j, 0, 0), &dVdt(i, j, 0, 0), &dHdt(i, j, 0, 0),
-                        &C(i, j, 0, 0), &Dmat(0, 0), Jx, Jy, w
+                        &C(i, j, 0, 0), Jx, Jy, w
                     );
                 } else if (n == 5) {
                     dg_wave_2D_volume_kernel_element<5>(
                         &U(i, j, 0, 0), &V(i, j, 0, 0), &H(i, j, 0, 0),
                         &dUdt(i, j, 0, 0), &dVdt(i, j, 0, 0), &dHdt(i, j, 0, 0),
-                        &C(i, j, 0, 0), &Dmat(0, 0), Jx, Jy, w
+                        &C(i, j, 0, 0), Jx, Jy, w
                     );
                 } else if (n == 6) {
                     dg_wave_2D_volume_kernel_element<6>(
                         &U(i, j, 0, 0), &V(i, j, 0, 0), &H(i, j, 0, 0),
                         &dUdt(i, j, 0, 0), &dVdt(i, j, 0, 0), &dHdt(i, j, 0, 0),
-                        &C(i, j, 0, 0), &Dmat(0, 0), Jx, Jy, w
+                        &C(i, j, 0, 0), Jx, Jy, w
                     );
                 }
 
@@ -366,25 +366,25 @@ void  dg_wave_adjoint_2D_volume_kernel_py(
                     dg_wave_adjoint_2D_volume_kernel_element<3>(
                         &U(i, j, 0, 0), &V(i, j, 0, 0), &H(i, j, 0, 0),
                         &dUdt(i, j, 0, 0), &dVdt(i, j, 0, 0), &dHdt(i, j, 0, 0),
-                        &C(i, j, 0, 0), &Dmat(0, 0), Jx, Jy, w
+                        &C(i, j, 0, 0), Jx, Jy, w
                     );
                 } else if (n == 4) {
                     dg_wave_adjoint_2D_volume_kernel_element<4>(
                         &U(i, j, 0, 0), &V(i, j, 0, 0), &H(i, j, 0, 0),
                         &dUdt(i, j, 0, 0), &dVdt(i, j, 0, 0), &dHdt(i, j, 0, 0),
-                        &C(i, j, 0, 0), &Dmat(0, 0), Jx, Jy, w
+                        &C(i, j, 0, 0), Jx, Jy, w
                     );
                 } else if (n == 5) {
                     dg_wave_adjoint_2D_volume_kernel_element<5>(
                         &U(i, j, 0, 0), &V(i, j, 0, 0), &H(i, j, 0, 0),
                         &dUdt(i, j, 0, 0), &dVdt(i, j, 0, 0), &dHdt(i, j, 0, 0),
-                        &C(i, j, 0, 0), &Dmat(0, 0), Jx, Jy, w
+                        &C(i, j, 0, 0), Jx, Jy, w
                     );
                 } else if (n == 6) {
                     dg_wave_adjoint_2D_volume_kernel_element<6>(
                         &U(i, j, 0, 0), &V(i, j, 0, 0), &H(i, j, 0, 0),
                         &dUdt(i, j, 0, 0), &dVdt(i, j, 0, 0), &dHdt(i, j, 0, 0),
-                        &C(i, j, 0, 0), &Dmat(0, 0), Jx, Jy, w
+                        &C(i, j, 0, 0), Jx, Jy, w
                     );
                 }
 
