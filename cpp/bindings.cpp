@@ -249,6 +249,68 @@ void  dg_wave_2D_volume_kernel_py(
             }
         }
     }
+
+    // DG x boundary contraction
+    double scale = 1 / (w * Jx);
+
+    #pragma omp parallel
+    {
+
+        #pragma omp for collapse(2)
+        for (std::size_t i = 0; i < nx - 1; ++i) {
+            for (std::size_t j = 0; j < ny; ++j) {
+                for (std::size_t k = 0; k < n; ++k) {
+
+                    double up = U(i+1, j, 0, k);
+                    double hp = H(i+1, j, 0, k);
+                    double um = U(i, j, n-1, k);
+                    double hm = H(i, j, n-1, k);
+                    double cp = C(i+1, j, 0, k);
+                    double cm = C(i, j, n-1, k);
+
+                    double num_flux = 0.5 * (hp + hm) - 0.5 * (up - um);
+                    dUdt(i + 1, j, 0, k) += (num_flux - hp) * cp * scale;
+                    dUdt(i, j, n-1, k) -= (num_flux - hm) * cm * scale;
+
+                    num_flux = 0.5 * (up + um) - 0.5 * (hp - hm);
+                    dHdt(i + 1, j, 0, k) += (num_flux - up) * cp * scale;
+                    dHdt(i, j, n-1, k) -= (num_flux - um) * cm * scale;
+                }
+            }
+        }
+
+    }
+
+    // DG y boundary contraction
+    scale = 1 / (w * Jy);
+
+    #pragma omp parallel
+    {
+
+        #pragma omp for collapse(2)
+        for (std::size_t i = 0; i < nx; ++i) {
+            for (std::size_t j = 0; j < ny - 1; ++j) {
+                for (std::size_t k = 0; k < n; ++k) {
+
+                    double vp = V(i, j+1, k, 0);
+                    double hp = H(i, j+1, k, 0);
+                    double vm = V(i, j, k, n-1);
+                    double hm = H(i, j, k, n-1);
+                    double cp = C(i, j+1, k, 0);
+                    double cm = C(i, j, k, n-1);
+
+                    double num_flux = 0.5 * (hp + hm) - 0.5 * (vp - vm);
+                    dVdt(i, j+1, k, 0) += (num_flux - hp) * cp * scale;
+                    dVdt(i, j, k, n-1) -= (num_flux - hm) * cm * scale;
+
+                    num_flux = 0.5 * (vp + vm) - 0.5 * (hp - hm);
+                    dHdt(i, j+1, k, 0) += (num_flux - vp) * cp * scale;
+                    dHdt(i, j, k, n-1) -= (num_flux - vm) * cm * scale;
+                }
+            }
+        }
+
+    }
 }
 
 
@@ -396,6 +458,77 @@ void  dg_wave_adjoint_2D_volume_kernel_py(
             }
         }
     }
+
+    // DG x boundary contraction
+    double scale = 1 / (w * Jx);
+
+    #pragma omp parallel
+    {
+
+        #pragma omp for collapse(2)
+        for (std::size_t i = 0; i < nx - 1; ++i) {
+            for (std::size_t j = 0; j < ny; ++j) {
+                for (std::size_t k = 0; k < n; ++k) {
+
+                    double up = U(i+1, j, 0, k);
+                    double hp = H(i+1, j, 0, k);
+                    double um = U(i, j, n-1, k);
+                    double hm = H(i, j, n-1, k);
+                    double cp = C(i+1, j, 0, k);
+                    double cm = C(i, j, n-1, k);
+
+                    double fluxp = -cp * hp;
+                    double fluxm = -cm * hm;
+                    double num_flux = 0.5 * (fluxp + fluxm) - 0.5 * (cp * up - cm * um);
+                    dUdt(i + 1, j, 0, k) += (num_flux - fluxp) * scale;
+                    dUdt(i, j, n-1, k) -= (num_flux - fluxm) * scale;
+
+                    fluxp = -cp * up;
+                    fluxm = -cm * um;
+                    num_flux = 0.5 * (fluxp + fluxm) - 0.5 * (cp * hp - cm * hm);
+                    dHdt(i + 1, j, 0, k) += (num_flux - fluxp) * scale;
+                    dHdt(i, j, n-1, k) -= (num_flux - fluxm) * scale;
+                }
+            }
+        }
+
+    }
+
+    // DG y boundary contraction
+    scale = 1 / (w * Jy);
+
+    #pragma omp parallel
+    {
+
+        #pragma omp for collapse(2)
+        for (std::size_t i = 0; i < nx; ++i) {
+            for (std::size_t j = 0; j < ny - 1; ++j) {
+                for (std::size_t k = 0; k < n; ++k) {
+
+                    double vp = V(i, j+1, k, 0);
+                    double hp = H(i, j+1, k, 0);
+                    double vm = V(i, j, k, n-1);
+                    double hm = H(i, j, k, n-1);
+                    double cp = C(i, j+1, k, 0);
+                    double cm = C(i, j, k, n-1);
+
+                    double fluxp = -cp * hp;
+                    double fluxm = -cm * hm;
+                    double num_flux = 0.5 * (fluxp + fluxm) - 0.5 * (cp * vp - cm * vm);
+                    dVdt(i, j+1, k, 0) += (num_flux - fluxp) * scale;
+                    dVdt(i, j, k, n-1) -= (num_flux - fluxm) * scale;
+
+                    fluxp = -cp * vp;
+                    fluxm = -cm * vm;
+                    num_flux = 0.5 * (fluxp + fluxm) - 0.5 * (cp * hp - cm * hm);
+                    dHdt(i, j+1, k, 0) += (num_flux - fluxp) * scale;
+                    dHdt(i, j, k, n-1) -= (num_flux - fluxm) * scale;
+                }
+            }
+        }
+
+    }
+
 }
 
 

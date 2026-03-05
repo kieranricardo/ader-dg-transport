@@ -34,8 +34,9 @@ class WaveAdjointDG2D(WaveDG2D):
             dstatedt[(slice(None),) + ip] = dstatedt_p
             dstatedt[(slice(None),) + im] = dstatedt_m
 
-        _interface_boundaries(self.xp_int, self.xm_int, 'x')
-        _interface_boundaries(self.yp_int, self.ym_int, 'y')
+        if not self.cpp:
+            _interface_boundaries(self.xp_int, self.xm_int, 'x')
+            _interface_boundaries(self.yp_int, self.ym_int, 'y')
 
         def _free_boundaries(ip, im, direction):
 
