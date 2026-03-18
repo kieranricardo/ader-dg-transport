@@ -6,10 +6,15 @@ from scipy.sparse.linalg import LinearOperator, lsqr
 
 class WaveDGOptimizerReceiver2D:
 
-    def __init__(self, forward_solver, adjoint_solver, ic_state, target_data, nsteps, forcing_func=None):
+    def __init__(self, forward_solver, adjoint_solver, ic_state, target_data, nsteps, forcing_func=None, tw=None):
 
         self.forward_solver = forward_solver
         self.adjoint_solver = adjoint_solver
+
+        if tw is None:
+            self.tw = np.ones(nsteps)
+        else:
+            self.tw = np.copy(tw)
 
         self.nsteps = nsteps
         self.ic_state = np.copy(ic_state)
@@ -62,7 +67,8 @@ class WaveDGOptimizerReceiver2D:
 
             data[i, :] = self.forward_solver.state[(slice(None),) + self.forward_solver.ym_ext]
 
-        error = data - self.target_data
+        error = (data - self.target_data)[:, :2]
+        error *= self.tw[:, None, None, None]
 
         return error
 
@@ -80,24 +86,64 @@ class WaveDGOptimizerReceiver2D:
 
         return dedc.ravel()
 
+    def hessp(self, c_in, dc):
+        c_in = c_in.reshape(self.forward_solver.c.shape)
+        _ = self.error(c_in, fill_gradient=True)
+
+        dc_w = dc.reshape(self.forward_solver.c.shape) * self.M_half
+
+        out = self.G_rmatvec(self.G_matvec(dc_w))
+        out = out.reshape(self.forward_solver.c.shape) * self.M_half_inv
+
+        return out.ravel()
+
+    def cost_function_w(self, c_w_in):
+        shape = self.forward_solver.c.shape
+        c_in = self.M_half_inv * c_w_in.reshape(shape)
+        error = self.error(c_in, fill_gradient=False)
+
+        return 0.5 * (error**2 * self.W).sum()
+
+    def jac_function_w(self, c_w_in):
+
+        shape = self.forward_solver.c.shape
+        c_in = self.M_half_inv * c_w_in.reshape(shape)
+        error = self.error(c_in, fill_gradient=True)
+
+        return self.G_rmatvec(error * self.W_half)
+
+    def hessp_w(self, c_w_in, dc_w):
+        shape = self.forward_solver.c.shape
+        c_in = self.M_half_inv * c_w_in.reshape(shape)
+        _ = self.error(c_in, fill_gradient=True)
+
+        return self.G_rmatvec(self.G_matvec(dc_w))
+
+    def hess_w(self, c_w_in):
+        shape = self.forward_solver.c.shape
+        c_in = self.M_half_inv * c_w_in.reshape(shape)
+        _ = self.error(c_in, fill_gradient=True)
+
+        return self.G.T @ self.G
+
     def G_matvec(self, dc_vec):
 
-        data = np.zeros_like(self.target_data)
+        data = np.zeros_like(self.target_data[:, :2])
         dc = dc_vec.reshape(self.forward_solver.c.shape) * self.M_half_inv
         self.forward_solver.state[:] = 0.0
         for i in range(self.nsteps):
             self.forward_solver.time_step(forcing=self.history_data[i] * dc[None, None])
-            data[i, :] = self.forward_solver.state[(slice(None),) + self.forward_solver.ym_ext]
+            data[i, :] = self.forward_solver.state[(slice(None),) + self.forward_solver.ym_ext][:2] * self.tw[i]
 
         return (self.W_half * data).ravel()
 
     def G_rmatvec(self, y_vec):
-        data = y_vec.reshape(self.target_data.shape) * self.W_half_inv
+        data = y_vec.reshape(self.target_data[:, :2].shape) * self.W_half_inv
 
         self.adjoint_solver.state[:] = 0.0
 
         for i in range(self.nsteps):
-            self.adjoint_solver.state[(slice(None),) + self.adjoint_solver.ym_ext] += data[-(i + 1)]
+            self.adjoint_solver.state[(slice(None),) + self.adjoint_solver.ym_ext][:2] += data[-(i + 1)] * self.tw[-(i + 1)]
             self.adjoint_solver.time_step(stage_data=self.adjoint_data[i])
 
         tmp = (self.adjoint_data[::-1, ::-1] * self.history_data).sum(axis=(0, 2)) * 0.5 * self.adjoint_solver.dt

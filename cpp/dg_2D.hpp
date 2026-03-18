@@ -92,8 +92,8 @@ inline void dg_wave_2D_volume_kernel_element(
 
                 }
 
-                dvdt(a, b) += - dhdy * c(a, b) / Jx;
-                dhdt(a, b) += - dvdy * c(a, b) / Jx;
+                dvdt(a, b) += - dhdy * c(a, b) / Jy;
+                dhdt(a, b) += - dvdy * c(a, b) / Jy;
 
         }
     }
@@ -168,8 +168,8 @@ inline void dg_wave_adjoint_2D_volume_kernel_element(
                     dvdy += D[b][k] * v(a, k) * c(a, k);
                 }
 
-                dvdt(a, b) += dhdy / Jx;
-                dhdt(a, b) += dvdy / Jx;
+                dvdt(a, b) += dhdy / Jy;
+                dhdt(a, b) += dvdy / Jy;
 
         }
     }

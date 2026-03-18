@@ -45,10 +45,8 @@ class WaveAdjointDG2D(WaveDG2D):
             state_m = np.copy(state_p)
             um, vm, hm = self.get_vars(state_m)
             hm *= -1
-            # if direction == 'y':
-            #     vm *= -1
-            # else:
-            #     um *= -1
+            # vm[:] = 0.5 * (vm + hm)
+            # hm[:] = vm
             c_ = np.copy(self.c[ip])
             self.solve_boundaries(state_p, state_m, dstatedt_p, dstatedt_alt, c_, c_, direction)
             dstatedt[(slice(None),) + ip] = dstatedt_p
@@ -56,11 +54,9 @@ class WaveAdjointDG2D(WaveDG2D):
             state_m, dstatedt_m = self.get_boundary_data(state, im), self.get_boundary_data(dstatedt, im)
             state_p = np.copy(state_m)
             up, vp, hp = self.get_vars(state_p)
-            # if direction == 'y':
-            #     vp *= -1
-            # else:
-            #     up *= -1
             hp *= -1
+            # vp[:] = 0.5 * (vp - hp)
+            # hp[:] = -vp
             c_ = np.copy(self.c[im])
             self.solve_boundaries(state_p, state_m, dstatedt_alt, dstatedt_m, c_, c_, direction)
             dstatedt[(slice(None),) + im] = dstatedt_m
@@ -95,7 +91,7 @@ class WaveAdjointDG2D(WaveDG2D):
         if self.x_periodic:
             _interface_boundaries(self.xp_ext, self.xm_ext, 'x')
         else:
-            _open_boundaries(self.xp_ext, self.xm_ext, 'x')
+            _free_boundaries(self.xp_ext, self.xm_ext, 'x')
 
         if self.y_periodic:
             _interface_boundaries(self.yp_ext, self.ym_ext, 'y')
@@ -131,14 +127,14 @@ class WaveAdjointDG2D(WaveDG2D):
             fluxp = -cp * hp
             fluxm = -cm * hm
             num_flux = 0.5 * (fluxp + fluxm) - 0.5 * (cp * up - cm * um)
-            dudtp += (num_flux - fluxp) / (self.weights_x[-1] * self.Jx)
-            dudtm += -(num_flux - fluxm) / (self.weights_x[-1] * self.Jx)
+            dudtp += (num_flux - fluxp) / (self.weights_x[-1] * J)
+            dudtm += -(num_flux - fluxm) / (self.weights_x[-1] * J)
 
             fluxp = -cp * up
             fluxm = -cm * um
             num_flux = 0.5 * (fluxp + fluxm) - 0.5 * (cp * hp - cm * hm)
-            dhdtp += (num_flux - fluxp) / (self.weights_x[-1] * self.Jy)
-            dhdtm += -(num_flux - fluxm) / (self.weights_x[-1] * self.Jy)
+            dhdtp += (num_flux - fluxp) / (self.weights_x[-1] * J)
+            dhdtm += -(num_flux - fluxm) / (self.weights_x[-1] * J)
 
         return 0.0
 
