@@ -45,8 +45,6 @@ class WaveAdjointDG2D(WaveDG2D):
             state_m = np.copy(state_p)
             um, vm, hm = self.get_vars(state_m)
             hm *= -1
-            # vm[:] = 0.5 * (vm + hm)
-            # hm[:] = vm
             c_ = np.copy(self.c[ip])
             self.solve_boundaries(state_p, state_m, dstatedt_p, dstatedt_alt, c_, c_, direction)
             dstatedt[(slice(None),) + ip] = dstatedt_p
@@ -55,15 +53,13 @@ class WaveAdjointDG2D(WaveDG2D):
             state_p = np.copy(state_m)
             up, vp, hp = self.get_vars(state_p)
             hp *= -1
-            # vp[:] = 0.5 * (vp - hp)
-            # hp[:] = -vp
             c_ = np.copy(self.c[im])
             self.solve_boundaries(state_p, state_m, dstatedt_alt, dstatedt_m, c_, c_, direction)
             dstatedt[(slice(None),) + im] = dstatedt_m
 
         def _open_boundaries(ip, im, direction):
 
-            assert direction == 'x'
+            assert direction in ('x', 'y')
 
             state_p, dstatedt_p = self.get_boundary_data(state, ip), self.get_boundary_data(dstatedt, ip)
             dstatedt_alt = np.zeros_like(dstatedt_p)
@@ -71,8 +67,12 @@ class WaveAdjointDG2D(WaveDG2D):
             um, vm, hm = self.get_vars(state_m)
             # (um + hm) = 0.0 --> um = -hm
             # um - hm = (up - hp) ---> 2 * um = (up - hp)
-            um[:] = 0.5 * (um + hm)
-            hm[:] = um
+            if direction == 'x':
+                um[:] = 0.5 * (um + hm)
+                hm[:] = um
+            elif direction == 'y':
+                vm[:] = 0.5 * (vm + hm)
+                hm[:] = vm
             c_ = np.copy(self.c[ip])
             self.solve_boundaries(state_p, state_m, dstatedt_p, dstatedt_alt, c_, c_, direction)
             dstatedt[(slice(None),) + ip] = dstatedt_p
@@ -82,8 +82,12 @@ class WaveAdjointDG2D(WaveDG2D):
             up, vp, hp = self.get_vars(state_p)
             # (up - hp) = 0.0 --> um = hm
             # um + hm = (up + hp) ---> 2 * um = (up + hp)
-            up[:] = 0.5 * (up - hp)
-            hp[:] = -up
+            if direction == 'x':
+                up[:] = 0.5 * (up - hp)
+                hp[:] = -up
+            elif direction == 'y':
+                vp[:] = 0.5 * (vp - hp)
+                hp[:] = -vp
             c_ = np.copy(self.c[im])
             self.solve_boundaries(state_p, state_m, dstatedt_alt, dstatedt_m, c_, c_, direction)
             dstatedt[(slice(None),) + im] = dstatedt_m
@@ -91,12 +95,12 @@ class WaveAdjointDG2D(WaveDG2D):
         if self.x_periodic:
             _interface_boundaries(self.xp_ext, self.xm_ext, 'x')
         else:
-            _free_boundaries(self.xp_ext, self.xm_ext, 'x')
+            _open_boundaries(self.xp_ext, self.xm_ext, 'x')
 
         if self.y_periodic:
             _interface_boundaries(self.yp_ext, self.ym_ext, 'y')
         else:
-            _free_boundaries(self.yp_ext, self.ym_ext, 'y')
+            _open_boundaries(self.yp_ext, self.ym_ext, 'y')
 
     def solve_boundaries(self, state_p, state_m, dstatedt_p, dstatedt_m, cp, cm, direction):
 
