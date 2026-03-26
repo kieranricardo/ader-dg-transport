@@ -139,8 +139,7 @@ def von_neumann_analysis(solver, cfl, x_shifts, y_shifts, verbose=False):
     M2[h_slice, h_slice] += 0.5 * y_cfl * (ym_integral + yp_integral)
     
     M1_inv = np.linalg.inv(M1)
-    M2_inv = np.linalg.inv(M1)
-    
+
     to_st_first_all_vars = np.zeros((3 * sz, 3 * n**2))
     for i in range(3):
         to_st_first_all_vars[i*sz:(i+1)*sz, i*n**2:(i+1)*n**2] = to_st_first
