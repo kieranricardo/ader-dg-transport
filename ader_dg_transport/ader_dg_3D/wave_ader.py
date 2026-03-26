@@ -15,6 +15,7 @@ class WaveAderDG3D(BaseADERDG3D):
         self.c = c
 
         self.dt = dt
+        self.ts = self.dt * self.taus
 
         self.x_cfl = self.c * self.dt / self.dx
         self.y_cfl = self.c * self.dt / self.dy
@@ -83,10 +84,13 @@ class WaveAderDG3D(BaseADERDG3D):
         self.M_nc_lu = lu_factor(self.M_nc)
 
 
-    def time_step(self, verbose=False, use_lu=True, multi_grid_pred=None, rhs_in=None, wt=1.0, tol=1e-8):
+    def time_step(self, forcing_func=None):
 
-        if rhs_in is None:
-            rhs_in = self.get_rhs(self.state)
+        rhs_in = self.get_rhs(self.state)
+        if forcing_func is not None:
+            ts = self.ts + self.time
+            F = forcing_func(self.xs, self.ys, self.zs, ts) * self.dt * 0.5
+            rhs_in += F
 
         state_pred = self.preconditioner(rhs_in)
 

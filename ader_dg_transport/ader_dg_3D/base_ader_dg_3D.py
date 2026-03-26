@@ -54,6 +54,7 @@ class BaseADERDG3D:
         self.xis = xs[:-1, :-1, :-1, None, None, None, None] + (xis[None, None, None, :] + 1) * 0.5 * dxi
         self.etas = ys[:-1, :-1, :-1, None, None, None, None] + (etas[None, None, None, :] + 1) * 0.5 * deta
         self.zetas = zs[:-1, :-1, :-1, None, None, None, None] + (zetas[None, None, None, :] + 1) * 0.5 * dzeta
+        self.taus = 0 * xs[:-1, :-1, :-1, None, None, None, None] + (taus[None, None, None, :] + 1) * 0.5
 
         self.xs = self.xlim * self.xis
         self.ys = self.ylim * self.etas
