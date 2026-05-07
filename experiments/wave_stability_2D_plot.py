@@ -15,6 +15,8 @@ import argparse
 
 import argparse
 
+run = True
+
 EPS = 1e-4
 comm = MPI.COMM_WORLD
 
@@ -290,31 +292,51 @@ def max_cfl(solver, niter, nk, batch_size=10_000):
 for poly_order in range(3, order+1):
 
     if poly_order == 3:
-        cfls = np.linspace(1e-5, 0.8, 40)
+        cmax = 0.71
     elif poly_order == 4:
-        cfls = np.linspace(1e-5, 0.5, 40)
+        cmax = 0.44
     elif poly_order == 5:
-        cfls = np.linspace(1e-5, 0.4, 40)
+        cmax = 0.34
     elif poly_order == 6:
-        cfls = np.linspace(1e-5, 0.3, 40)
+        cmax = 0.24
     elif poly_order == 7:
-        cfls = np.linspace(1e-5, 0.3, 40)
+        cmax = 0.19
 
-    solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=poly_order)
-    if rank == 0:
-        print('Running order =', solver.poly_order)
+    cfls = np.concatenate(
+        [np.linspace(1e-5, 0.9 * cmax, 5)[:-1],
+         np.linspace(0.9 * cmax, 1.2 * cmax, 5)]
+    )
+    fp = os.path.join(data_dir, f'new-ader-order-{poly_order}-2D.npy')
+    if run:
+        solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=poly_order)
+        if rank == 0:
+            print('Running order =', solver.poly_order)
 
-    amps = [para_von_neumann_analysis(solver, cfl, 3, nk) for cfl in cfls]
-    amps1 = [t[0] for t in amps]
-    amps2 = [t[1] for t in amps]
-    plt.plot(cfls, np.array(amps1) - 1, '-', label=f'Order {solver.poly_order} max eigval')
-    plt.plot(cfls, np.array(amps2) - 1, '-', label=f'Order {solver.poly_order} max singval')
+        amps = [para_von_neumann_analysis(solver, cfl, 3, nk) for cfl in cfls]
+        amps1 = np.array([t[0] for t in amps])
+        amps2 = [t[1] for t in amps]
+        np.save(fp, amps1)
+
+    else:
+
+        amps1 = np.load(fp)
+
+    print(abs(amps1).max())
+    plt.plot(cfls, np.array(amps1), '*-', label=f'Order {poly_order}')
+    # plt.plot(cfls, np.array(amps2) - 1, '-', label=f'Order {solver.poly_order} max singval')
 
 
-plt.yscale('symlog', linthresh=1e-14)
+
+# plt.yscale('symlog', linthresh=1e-14)
 plt.ylabel("Amplification factor")
 plt.xlabel("CFL")
 plt.legend()
+# plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+
 plt.grid()
-plt.title('New method (non-conservative) stability')
-plt.savefig(os.path.join(plot_dir, f"wave-non-cons-2D-order-{order}-amplification-minus-one.png"))
+# plt.ylim([0.99, 1.05])
+# plt.xlim([0, 1.0])
+plt.tight_layout()
+# plt.title('New method (non-conservative) stability')
+plt.savefig(os.path.join(plot_dir, f"wave-non-cons-2D-order-{order}-amplification.png"))
+plt.show()

@@ -15,11 +15,13 @@ import argparse
 
 import argparse
 
+run = True
 comm = MPI.COMM_WORLD
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--nk', type=int, help='Number of wave numbers')
 parser.add_argument('--o', type=int, help='Polynomial order')
+
 args = parser.parse_args()
 
 EPS  = 1e-6
@@ -282,29 +284,46 @@ def para_von_neumann_analysis(solver, cfl, nk):
 for poly_order in range(3, order+1):
 
     if poly_order == 3:
-        cfls = np.linspace(1e-5, 0.1, 40)
+        cmax = 0.084
     elif poly_order == 4:
-        cfls = np.linspace(1e-5, 0.06, 40)
+        cmax = 0.05
     elif poly_order == 5:
-        cfls = np.linspace(1e-5, 0.04, 40)
+        cmax = 0.033
     elif poly_order == 6:
-        cfls = np.linspace(1e-5, 0.025, 40)
+        cmax = 0.0242
     elif poly_order == 7:
-        cfls = np.linspace(1e-5, 0.025, 40)
+       cmax = 0.01855
 
-    solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=poly_order)
-    if rank == 0:
-        print('Running order =', solver.poly_order)
-    amps = [para_von_neumann_analysis(solver, cfl, nk) for cfl in cfls]
-    amps1 = [t[0] for t in amps]
-    amps2 = [t[1] for t in amps]
-    plt.plot(cfls, np.array(amps1) - 1, '-', label=f'Order {solver.poly_order} max eigval')
-    plt.plot(cfls, np.array(amps2) - 1, '-', label=f'Order {solver.poly_order} max singval')
+    cfls = np.concatenate(
+        [np.linspace(1e-5, 0.9 * cmax, 5)[:-1],
+         np.linspace(0.9 * cmax, 1.2 * cmax, 5)]
+    )
 
-plt.yscale('symlog', linthresh=1e-14)
+    fp = os.path.join(data_dir, f'std-ader-order-{poly_order}-2D.npy')
+    if run:
+        solver = BaseADERDG2D(xlim=1.0, ylim=1.0, nx=3, ny=3, poly_order=poly_order)
+        if rank == 0:
+            print('Running order =', solver.poly_order)
+        amps = [para_von_neumann_analysis(solver, cfl, nk) for cfl in cfls]
+        amps1 = [t[0] for t in amps]
+        amps2 = [t[1] for t in amps]
+        np.save(fp, np.array(amps1))
+    else:
+        amps1 = np.load(fp)
+
+    plt.plot(cfls, np.array(amps1), '-*', label=f'Order {poly_order}')
+    # plt.plot(cfls, np.array(amps2) - 1, '-', label=f'Order {solver.poly_order} max singval')
+
+
+
+# plt.yscale('symlog', linthresh=1e-14)
 plt.ylabel("Amplification factor")
 plt.xlabel("CFL")
 plt.legend()
 plt.grid()
-plt.title('Standard ADER-DG stability')
-plt.savefig(os.path.join(plot_dir, f"wave-ader-dg-2D-order-{order}-amplification-minus-one.png"))
+# plt.title('Standard ADER-DG stability')
+# plt.xlim([0, 0.1])
+# plt.ylim([0.99, 1.05])
+plt.tight_layout()
+plt.savefig(os.path.join(plot_dir, f"wave-ader-dg-2D-order-{order}-amplification.png"))
+plt.show()

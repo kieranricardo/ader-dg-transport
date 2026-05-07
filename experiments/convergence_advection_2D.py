@@ -24,7 +24,7 @@ xlim = ylim = 2
 tend = 2.0
 cx = cy = 1.0
 cfl = 0.6
-run = True
+run = False
 plot = True
 
 if run:
